@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  hass-mcp:
+    image: voska/hass-mcp:latest
+    container_name: hass-mcp-server
+    restart: unless-stopped
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Additional environment variables
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app
+
+    # Interactive mode for MCP server
+    stdin_open: true
+    tty: false
+
+    # Auto remove container when stopped (optional)
+    # remove: true
+
+    # Network configuration (uncomment if needed)
+    # ports:
+    #   - "8080:8080"
+
+    # Volume mounts for persistent data (uncomment if needed)
+    # volumes:
+    #   - ./data:/app/data
