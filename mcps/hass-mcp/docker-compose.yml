@@ -1,0 +1,56 @@
+services:
+  hass_mcp_proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hass-mcp-proxy
+    command:
+      [
+        '--port',
+        '7010',
+        '--host',
+        '0.0.0.0',
+        '--pass-environment',
+        '--',
+        'docker',
+        'run',
+        '-i',
+        '--rm',
+        '--network=mcpx_ai-infrastructure',
+        '--label=com.docker.compose.project=hass-mcp',
+        '--label=com.docker.compose.service=hass_mcp_server',
+        '--label=com.docker.compose.container-number=1',
+        '--label=com.docker.compose.project.config_files=./mcps/hass-mcp/docker-compose.yml',
+        '--label=com.docker.compose.project.working_dir=./mcps/hass-mcp',
+        '--label=com.docker.compose.oneoff=False',
+        '--name=hass-mcp-server',
+        '-e',
+        'HA_URL',
+        '-e',
+        'HA_TOKEN',
+        '-e',
+        'AUTO_APPROVE',
+        'voska/hass-mcp:latest',
+      ]
+    ports:
+      - '7010:7010'
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:7010/status || exit 1']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ai-infrastructure
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true
