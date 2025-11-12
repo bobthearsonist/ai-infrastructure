@@ -1,0 +1,31 @@
+services:
+  # Context7 MCP Server - Up-to-date Code Documentation
+  context7-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: context7_mcp
+    restart: unless-stopped
+    ports:
+      - '7008:7008' # Context7 MCP HTTP port
+    networks:
+      - ai-infrastructure
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:7008/health',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true
