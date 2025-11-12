@@ -1,0 +1,12 @@
+FROM ghcr.io/sparfenyuk/mcp-proxy:latest
+
+# Install docker CLI so the proxy can spawn docker containers
+
+RUN apk add --no-cache docker-cli
+
+# Install uv using pip (recommended by mcp-proxy docs)
+RUN python3 -m ensurepip && pip install --no-cache-dir uv
+
+ENV UV_PYTHON_PREFERENCE=only-system
+
+ENTRYPOINT ["mcp-proxy"]

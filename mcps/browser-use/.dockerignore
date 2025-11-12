@@ -1,0 +1,16 @@
+# Exclude automation scripts from container build
+automation-scripts/
+
+# Exclude common development files
+*.pyc
+__pycache__/
+.git/
+.gitignore
+.pytest_cache/
+.vscode/
+.DS_Store
+*.log
+
+# Exclude documentation
+README.md
+*.md

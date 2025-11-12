@@ -1,0 +1,64 @@
+services:
+  browser_use_proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    container_name: browser-use-proxy
+    command:
+      [
+        '--port',
+        '7011',
+        '--host',
+        '0.0.0.0',
+        '--pass-environment',
+        '--',
+        'docker',
+        'run',
+        '-i',
+        '--rm',
+        '--network=mcpx_ai-infrastructure',
+        '--name=browser-use-mcp',
+        '--label=com.docker.compose.project=browser-use',
+        '--label=com.docker.compose.service=browser-use-mcp',
+        '--label=com.docker.compose.container-number=1',
+        '--label=com.docker.compose.project.config_files=./mcps/browser-use/docker-compose.yml',
+        '--label=com.docker.compose.project.working_dir=./mcps/browser-use',
+        '--label=com.docker.compose.oneoff=False',
+        '-e',
+        'OPENAI_API_KEY',
+        '-e',
+        'ANTHROPIC_API_KEY',
+        '-e',
+        'BROWSER_USE_HEADLESS',
+        '-e',
+        'BROWSER_USE_LOGGING_LEVEL',
+        '-e',
+        'BROWSER_USE_SETUP_LOGGING',
+        '-e',
+        'MCP_PORT',
+        'browser-use:latest',
+        'browser-use',
+        '--mcp',
+      ]
+    ports:
+      - '7011:7011'
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:7011/status || exit 1']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ai-infrastructure
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true
