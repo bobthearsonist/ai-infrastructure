@@ -1,0 +1,40 @@
+version: '3.9'
+
+services:
+  browsermcp:
+    image: node:20-alpine
+    container_name: browsermcp
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm install -g @browsermcp/mcp@latest && npx @browsermcp/mcp@latest --host=0.0.0.0 --port=7009"
+    ports:
+      - '7009:7009' # BrowserMCP server port
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - browsermcp_data:/app
+    # Healthcheck to ensure the server is running
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:7009/health',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ai-infrastructure
+
+volumes:
+  browsermcp_data:
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true
