@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  mcp_playwright:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: mcp_playwright
+    # The image already sets the entrypoint to the CLI.
+    # Just pass flags exactly like your working docker run:
+    command: ['--host=0.0.0.0', '--port=7007']
+    ports:
+      - '7007:7007' # localhost:7007/mcp
+    restart: unless-stopped
+    environment:
+      PLAYWRIGHT_DISABLE_GPU: '1' # optional; fine to remove
+    volumes:
+      - ./data/playwright-cache:/root/.cache/ms-playwright
+      # remove or adjust this if you don't need a custom profile dir:
+      - ./data/playwright-profile:/home/pw/profile
+    # Healthcheck: the server exposes /mcp (and /sse for legacy).
+    # Note: if curl isn't in the image, comment this out or replace with a TCP check.
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:7007/mcp']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ai-infrastructure
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true
