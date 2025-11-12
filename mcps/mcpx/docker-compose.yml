@@ -1,0 +1,64 @@
+services:
+  # MCPX Gateway - MCP Proxy Server
+  mcpx:
+    image: us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest
+    container_name: mcpx
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "9000:9000" # MCPX API port
+      - "5173:5173" # Control Plane UI port
+      - "9001:9001" # Internal webserver port
+      - "3000:3000" # Metrics port
+    volumes:
+      - ./:/lunar/packages/mcpx-server/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - ai-infrastructure
+
+  # Lunar Proxy - API Gateway
+  lunar-proxy:
+    image: lunarapi/lunar-proxy:latest
+    container_name: lunar-proxy
+    restart: unless-stopped
+    ports:
+      - "8000:8000" # Main proxy port
+      - "8040:8040" # Health check port
+      - "8081:8081" # Admin port
+    volumes:
+      - ./:/etc/lunar-proxy
+    environment:
+      - TENANT_NAME=ORGANIZATION
+      - LUNAR_API_KEY=8adb1fcd-30dd-4a99-ada4-653f2be8c225
+      - LOG_LEVEL=ERROR
+      - LUNAR_MANAGED=false
+      - LUNAR_TELEMETRY=true
+    networks:
+      - ai-infrastructure
+
+  # NGINX SSL Proxy
+  nginx-ssl:
+    image: nginx:alpine
+    container_name: mcpx-ssl-proxy
+    restart: unless-stopped
+    ports:
+      - "9443:9443" # HTTPS MCPX API port
+      - "5443:5443" # HTTPS Control Plane UI port
+      - "9222:9222" # Chrome DevTools Protocol proxy port
+      - "61822:61822" # Kapture WebSocket server port
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs/tls/cert.pem:/etc/ssl/certs/cert.pem:ro
+      - ./certs/tls/key.pem:/etc/ssl/private/key.pem:ro
+      - /dev/null:/etc/nginx/conf.d/default.conf:ro # Disable default config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - mcpx
+    networks:
+      - ai-infrastructure
+
+networks:
+  ai-infrastructure:
+    driver: bridge
