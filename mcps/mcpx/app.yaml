@@ -5,7 +5,12 @@ permissions:
   consumers:
     Claude:
       _type: default-block
-      consumerGroupKey: claude-ai (via mcp-remote 0.1.29) Profile
+      consumerGroupKey: claude-ai (via mcp-remote 0.1.30) Profile
+      allow:
+        - browser
+    Claude Desktop:
+      _type: default-block
+      consumerGroupKey: claude-ai (via mcp-remote 0.1.30) Profile
       allow:
         - browser
     VSCode:
@@ -16,8 +21,8 @@ permissions:
 toolGroups:
   - name: browser
     services:
-      context7: "*"
-      kapture: "*"
+      context7: '*'
+      kapture: '*'
 auth:
   enabled: false
 toolExtensions:
