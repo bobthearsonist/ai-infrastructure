@@ -1,0 +1,45 @@
+services:
+  # agentgateway - MCP Gateway/Proxy
+  agentgateway:
+    image: ghcr.io/agentgateway/agentgateway:latest
+    container_name: agentgateway
+    restart: unless-stopped
+    ports:
+      - "3847:3847" # MCP endpoint
+      - "15001:15000" # UI (internal 15000 -> external 15001)
+    volumes:
+      - ./config.yaml:/config/config.yaml:ro
+      - ./memory.json:/config/memory.json
+    command: ["-f", "/config/config.yaml"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    dns:
+      - 127.0.0.11  # Docker embedded DNS
+    networks:
+      - ai-infrastructure
+
+  # NGINX SSL/WebSocket Proxy
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: agentgateway-proxy
+    restart: unless-stopped
+    ports:
+      - "3443:3443" # HTTPS MCP endpoint
+      - "15443:15443" # HTTPS UI
+      - "9223:9223" # Chrome DevTools Protocol proxy (different from MCPX 9222)
+      - "61823:61823" # Kapture WebSocket server (different from MCPX 61822)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs/cert.pem:/etc/ssl/certs/cert.pem:ro
+      - ./certs/key.pem:/etc/ssl/private/key.pem:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - agentgateway
+    networks:
+      - ai-infrastructure
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true

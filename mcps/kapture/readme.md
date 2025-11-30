@@ -1,5 +1,8 @@
 # Kapture MCP Setup
 
+> **TODO**: Migrate to agentgateway setup. Currently documented for MCPX.
+> Kapture requires special handling due to WebSocket requirements for Chrome extension.
+
 Kapture is a Chrome DevTools Extension that enables browser automation through the Model Context Protocol (MCP). This setup runs Kapture within the MCPX Docker infrastructure.
 
 ## Architecture
