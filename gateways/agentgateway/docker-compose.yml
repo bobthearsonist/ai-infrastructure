@@ -7,6 +7,7 @@ services:
     ports:
       - "3847:3847" # MCP endpoint
       - "15001:15000" # UI (internal 15000 -> external 15001)
+      - "15020:15020" # Metrics (Prometheus)
     volumes:
       - ./config.yaml:/config/config.yaml:ro
       - ./memory.json:/config/memory.json
@@ -15,6 +16,20 @@ services:
       - "host.docker.internal:host-gateway"
     dns:
       - 127.0.0.11  # Docker embedded DNS
+    networks:
+      - ai-infrastructure
+
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686" # Web UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
     networks:
       - ai-infrastructure
 

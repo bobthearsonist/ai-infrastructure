@@ -238,19 +238,53 @@ See [clients/](clients/) for configuration examples for each AI client.
 | ---- | ------- | -------- |
 | 3847 | agentgateway MCP | HTTP |
 | 15001 | agentgateway Admin UI | HTTP |
+| 15020 | agentgateway Metrics | Prometheus |
+| 16686 | Jaeger UI | HTTP |
+| 4317 | Jaeger OTLP gRPC | gRPC |
+| 4318 | Jaeger OTLP HTTP | HTTP |
 | 3443 | agentgateway MCP (SSL) | HTTPS |
 | 7030 | stdio-proxy | SSE |
 | 61822 | Kapture WebSocket | WebSocket |
 | 3000 | Langfuse (planned) | HTTP |
 
+## Observability
+
+agentgateway provides built-in observability:
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `http://localhost:15001/ui` | Admin UI with playground |
+| `http://localhost:15020/metrics` | Prometheus metrics |
+| `http://localhost:16686` | Jaeger UI (distributed tracing) |
+
+**Metrics include:**
+
+- `agentgateway_requests_total` - HTTP requests by client, method, status
+- `agentgateway_mcp_requests` - MCP tool calls
+- `tool_calls_total` - Tool calls by server and tool name
+- `list_calls_total` - List operations
+
+**Traces:** Configure OpenTelemetry in `config.yaml` to send traces to Jaeger:
+
+```yaml
+config:
+  tracing:
+    otlpEndpoint: http://jaeger:4317
+```
+
 ## TODO
 
 - [ ] Evaluate using agentgateway's native TLS instead of nginx-proxy for HTTPS termination
 - [ ] Keep nginx-proxy for CDP proxy (9223) - needed for Playwright/browser-use MCPs to connect to host Chrome
+- [x] Add client identification headers for per-client tracking
+- [x] Set up Jaeger for distributed tracing
+- [ ] Configure agentgateway to send traces to Jaeger (enable in config.yaml)
+- [ ] Create Grafana dashboard for metrics visualization
 
 ## Resources
 
 - [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro)
 - [agentgateway](https://agentgateway.dev/docs/)
+- [agentgateway Observability](https://agentgateway.dev/docs/reference/observability/metrics/)
 - [Langfuse](https://langfuse.com/docs)
 

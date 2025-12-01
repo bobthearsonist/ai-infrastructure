@@ -1,6 +1,9 @@
 # Top-level config settings
 config:
   adminAddr: "0.0.0.0:15000"
+  tracing:
+    otlpEndpoint: http://jaeger:4317
+    randomSampling: true
 
 binds:
 - port: 3847
