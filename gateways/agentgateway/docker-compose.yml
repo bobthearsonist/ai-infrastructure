@@ -19,20 +19,6 @@ services:
     networks:
       - ai-infrastructure
 
-  # Jaeger - Distributed Tracing
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: jaeger
-    restart: unless-stopped
-    ports:
-      - "16686:16686" # Web UI
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    networks:
-      - ai-infrastructure
-
   # NGINX SSL/WebSocket Proxy
   nginx-proxy:
     image: nginx:alpine

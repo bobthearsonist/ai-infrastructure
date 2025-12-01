@@ -160,7 +160,8 @@ ai-infrastructure/
 │   ├── sequential-thinking/ # Chain of thought reasoning
 │   └── stdio-proxy/   # stdio→SSE bridge
 ├── services/          # Platform services
-│   └── langfuse/      # LLM observability & prompts (planned)
+│   ├── langfuse/      # LLM observability & prompts (planned)
+│   └── observability/ # Prometheus, Grafana, Jaeger
 └── workflows/         # Custom workflow definitions
 ```
 
@@ -189,6 +190,7 @@ ai-infrastructure/
 
 | Service | Description | Status | Docs |
 | ------- | ----------- | ------ | ---- |
+| [Observability](services/observability/readme.md) | Prometheus, Grafana, Jaeger | ✅ Running | [→](services/observability/readme.md) |
 | [Langfuse](services/langfuse/readme.md) | LLM observability, prompts, evals | ⏳ Planned | [→](services/langfuse/readme.md) |
 
 ### Clients
@@ -223,12 +225,20 @@ cd gateways/agentgateway
 docker-compose up -d
 ```
 
-### 4. Access
+### 4. Start observability stack (optional)
+
+```bash
+cd services/observability
+docker-compose up -d
+```
+
+### 5. Access
 
 - **MCP Endpoint**: `http://localhost:3847/mcp`
 - **Admin UI**: `http://localhost:15001/ui`
+- **Grafana**: `http://localhost:3000` (admin/admin)
 
-### 5. Configure your AI client
+### 6. Configure your AI client
 
 See [clients/](clients/) for configuration examples for each AI client.
 
@@ -242,10 +252,11 @@ See [clients/](clients/) for configuration examples for each AI client.
 | 16686 | Jaeger UI | HTTP |
 | 4317 | Jaeger OTLP gRPC | gRPC |
 | 4318 | Jaeger OTLP HTTP | HTTP |
+| 9090 | Prometheus | HTTP |
+| 3000 | Grafana | HTTP |
 | 3443 | agentgateway MCP (SSL) | HTTPS |
 | 7030 | stdio-proxy | SSE |
 | 61822 | Kapture WebSocket | WebSocket |
-| 3000 | Langfuse (planned) | HTTP |
 
 ## Observability
 
@@ -255,6 +266,8 @@ agentgateway provides built-in observability:
 | -------- | ------- |
 | `http://localhost:15001/ui` | Admin UI with playground |
 | `http://localhost:15020/metrics` | Prometheus metrics |
+| `http://localhost:9090` | Prometheus UI |
+| `http://localhost:3000` | Grafana dashboards (admin/admin) |
 | `http://localhost:16686` | Jaeger UI (distributed tracing) |
 
 **Metrics include:**
