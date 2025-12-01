@@ -64,9 +64,7 @@ clients -up-> gateway : http://localhost:3847/mcp
 - Install Kapture extension from Chrome Web Store
 - Open Chrome DevTools (F12 or Cmd+Option+I)
 - Navigate to "Kapture" panel
-- Extension automatically connects to `localhost:61823`
-
-### WebSocket Proxy (nginx)
+- Extension automatically connects to `localhost:61822`
 
 ### Kapture MCP Server
 
@@ -106,11 +104,11 @@ Runs in stdio-proxy container via `npx kapture-mcp bridge`:
 
 ## Troubleshooting
 
-| Issue                   | Solution                                    |
-| ----------------------- | ------------------------------------------- |
-| Extension won't connect | Verify nginx listening: `lsof -i :61822`    |
-| WebSocket errors        | Check nginx logs: `docker logs nginx-proxy` |
-| No tools appearing      | Verify kapture-mcp in stdio-proxy logs      |
+| Issue                   | Solution                                      |
+| ----------------------- | --------------------------------------------- |
+| Extension won't connect | Verify stdio-proxy listening: `lsof -i :61822` |
+| WebSocket errors        | Check logs: `docker logs stdio-proxy`          |
+| No tools appearing      | Verify kapture-mcp in stdio-proxy logs         |
 
 ## Related
 

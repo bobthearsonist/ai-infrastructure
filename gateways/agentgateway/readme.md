@@ -8,15 +8,16 @@ agentgateway is an open-source MCP gateway/proxy from the Linux Foundation. It s
 
 ## Current Status
 
-✅ **Working** - Serving 9 tools from 2 MCP backends.
+✅ **Working** - Serving 24+ tools from 3 MCP backends.
 
 ## Ports
 
-| Port  | Protocol | Description              |
-| ----- | -------- | ------------------------ |
-| 3847  | HTTP     | MCP endpoint             |
-| 15001 | HTTP     | Admin UI Dashboard       |
-| 3443  | HTTPS    | MCP endpoint (via nginx) |
+| Port  | Protocol   | Description              |
+| ----- | ---------- | ------------------------ |
+| 3847  | HTTP       | MCP endpoint             |
+| 15001 | HTTP       | Admin UI Dashboard       |
+| 15020 | Prometheus | Metrics endpoint         |
+| 3443  | HTTPS      | MCP endpoint (via nginx) |
 
 ## Configured Backends
 
@@ -24,11 +25,11 @@ agentgateway is an open-source MCP gateway/proxy from the Linux Foundation. It s
 | ---------- | ------ | --------- | ------ | ---- |
 | sequential-thinking | ✅ Running | SSE | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/sequential-thinking/readme.md) |
 | memory | ✅ Running | SSE | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/memory/readme.md) |
-| kapture | ✅ Configured | SSE + WebSocket | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/kapture/readme.md) |
-| context7 | ⏳ Planned | SSE | container | - |
-| playwright | ⏳ Planned | SSE | container | [→](../../mcps/playwright/readme.md) |
-| browser-use | ⏳ Planned | SSE | container | - |
-| hass-mcp | ⏳ Planned | SSE | container | - |
+| kapture | ✅ Running | SSE + WebSocket | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/kapture/readme.md) |
+| context7 | ✅ Running | SSE | container | [→](../../mcps/context7/readme.md) |
+| playwright | ✅ Running | SSE | container | [→](../../mcps/playwright/readme.md) |
+| browser-use | ✅ Running | SSE | container | [→](../../mcps/browser-use/readme.md) |
+| hass-mcp | ✅ Running | SSE | container | [→](../../mcps/hass-mcp/readme.md) |
 | langfuse-mcp | ⏳ Planned | SSE | container | [→](../../services/langfuse/readme.md) |
 
 ## Setup
