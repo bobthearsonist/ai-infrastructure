@@ -172,7 +172,7 @@ uvx browser-use[cli] --help
 
 **Note**: Job application automation has been moved to a separate repository:
 
-- **Location**: `~/Repositories/job-hunt/ai job form filler/`
+- **Location**: `./examples/job-form-filler/`
 - **Workflow Scripts**: `manage_workflow.sh` for job application automation
 - **Resume Management**: Dedicated resume data and application logic
 - **Documentation**: See `QUICKSTART.md` in the job hunt repository
