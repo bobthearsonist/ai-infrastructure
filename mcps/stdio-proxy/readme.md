@@ -4,7 +4,7 @@ Runs multiple stdio-based MCP servers as SSE endpoints using [mcp-proxy](https:/
 
 ## Status
 
-✅ **Running** - Serving 2 MCP servers with 9 tools total.
+✅ **Running** - Serving 3 MCP servers.
 
 ## Servers
 
@@ -12,6 +12,7 @@ Runs multiple stdio-based MCP servers as SSE endpoints using [mcp-proxy](https:/
 |--------|-------|----------|
 | sequential-thinking | 1 | `/servers/sequential-thinking/sse` |
 | memory | 8 | `/servers/memory/sse` |
+| kapture | 15+ | `/servers/kapture/sse` |
 
 ## Endpoints
 
@@ -21,6 +22,13 @@ The stdio-proxy exposes each MCP server at a unique SSE endpoint:
 |-----|-----|
 | sequential-thinking | `http://localhost:7030/servers/sequential-thinking/sse` |
 | memory | `http://localhost:7030/servers/memory/sse` |
+| kapture | `http://localhost:7030/servers/kapture/sse` |
+
+### Special Ports
+
+| Port | Purpose |
+|------|--------|
+| 61822 | Kapture WebSocket bridge (Chrome extension connects here) |
 
 These endpoints are consumed by agentgateway, which aggregates them into a single MCP interface.
 
@@ -82,6 +90,13 @@ The `servers.json` file defines which MCP servers to run:
     "memory": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-memory"]
+    },
+    "kapture": {
+      "command": "npx",
+      "args": ["-y", "kapture-mcp", "bridge"],
+      "env": {
+        "KAPTURE_BRIDGE_PORT": "61822"
+      }
     }
   }
 }

@@ -10,6 +10,13 @@
       "env": {
         "MEMORY_FILE_PATH": "/data/memory/memory.json"
       }
+    },
+    "kapture": {
+      "command": "npx",
+      "args": ["-y", "kapture-mcp", "bridge"],
+      "env": {
+        "KAPTURE_BRIDGE_PORT": "61822"
+      }
     }
   }
 }

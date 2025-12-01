@@ -24,11 +24,11 @@ agentgateway is an open-source MCP gateway/proxy from the Linux Foundation. It s
 | ---------- | ------ | --------- | ------ | ---- |
 | sequential-thinking | ✅ Running | SSE | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/sequential-thinking/readme.md) |
 | memory | ✅ Running | SSE | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/memory/readme.md) |
+| kapture | ✅ Configured | SSE + WebSocket | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/kapture/readme.md) |
 | context7 | ⏳ Planned | SSE | container | - |
 | playwright | ⏳ Planned | SSE | container | [→](../../mcps/playwright/readme.md) |
 | browser-use | ⏳ Planned | SSE | container | - |
 | hass-mcp | ⏳ Planned | SSE | container | - |
-| kapture | ⏳ Planned | SSE | [kapture-proxy](../../mcps/kapture/readme.md) | [→](../../mcps/kapture/readme.md) |
 | langfuse-mcp | ⏳ Planned | SSE | container | [→](../../services/langfuse/readme.md) |
 
 ## Setup
@@ -136,14 +136,22 @@ This setup runs two containers:
 
 | Container | Image | Purpose |
 | --------- | ----- | ------- |
-| agentgateway | `ghcr.io/agentgateway/agentgateway` | MCP gateway |
-| nginx-proxy | `nginx:alpine` | SSL termination, WebSocket proxy |
+| agentgateway | `ghcr.io/agentgateway/agentgateway` | MCP gateway (Linux Foundation) |
+| nginx-proxy | `nginx:alpine` | SSL termination, CDP proxy |
 
-The nginx-proxy provides:
+### nginx-proxy
 
-- HTTPS on port 3443 (MCP) and 15443 (Admin UI)
-- WebSocket proxy on port 61823 (for Kapture)
-- CDP proxy on port 9223 (Chrome DevTools)
+The nginx-proxy is our custom addition (not part of agentgateway) that provides:
+
+| Port | Purpose | Direction |
+|------|---------|-----------|
+| 3443 | HTTPS MCP endpoint | Clients → agentgateway |
+| 15443 | HTTPS Admin UI | Browser → agentgateway |
+| 9223 | CDP proxy | Containers → host Chrome:9222 |
+
+**Why CDP proxy?** Playwright and browser-use MCPs run inside Docker containers but need to control Chrome running on the host. Containers can't reach `localhost:9222` directly, so nginx proxies `host.docker.internal:9223` → `host:9222`.
+
+> **Note:** Kapture doesn't use this proxy. The Chrome extension (running on host) connects directly to stdio-proxy:61822. The connection direction is reversed - host→container instead of container→host.
 
 ## Troubleshooting
 

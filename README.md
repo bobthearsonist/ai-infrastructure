@@ -24,16 +24,17 @@ package "AI Clients" as clients #E3F2FD {
 ' === Gateway Layer ===
 package "Gateway Layer" as gateway_layer #E8F5E9 {
   component "agentgateway\n:3847 (HTTP)\n:15000 (Admin UI)" as agentgateway #C8E6C9
-  component "nginx-proxy\n:3443 (HTTPS MCP)\n:15443 (HTTPS UI)\n:9223 (CDP)\n:61823 (WebSocket)" as nginx #A5D6A7
+  component "nginx-proxy\n:3443 (HTTPS)\n:9223 (CDP)" as nginx #A5D6A7
 }
 
 ' === MCP Backends - Currently Running ===
 package "Running MCPs" as running #FFF3E0 {
-  component "stdio-proxy\n:7030" as stdio_proxy #FFCC80
+  component "stdio-proxy\n:7030 (SSE)\n:61822 (Kapture WS)" as stdio_proxy #FFCC80
 
   package "stdio MCPs" as stdio_mcps #FFE0B2 {
     [sequential-thinking\n(1 tool)] as seq_think
     [memory\n(8 tools)] as memory
+    [kapture\n(15+ tools)] as kapture_mcp
   }
 }
 
@@ -43,7 +44,6 @@ package "Planned MCPs" as planned #ECEFF1 {
   [playwright\n:7007] as playwright #CFD8DC
   [browser-use\n:7011] as browser_use #CFD8DC
   [hass-mcp\n:7010] as hass_mcp #CFD8DC
-  [kapture-proxy\n:7031 (SSE)\n:61822 (WebSocket)] as kapture #CFD8DC
   [langfuse-mcp\n:7012 (prompts)] as langfuse_mcp #CE93D8
 }
 
@@ -68,12 +68,12 @@ agentgateway ..> context7 : SSE (planned)
 agentgateway ..> playwright : SSE (planned)
 agentgateway ..> browser_use : SSE (planned)
 agentgateway ..> hass_mcp : SSE (planned)
-agentgateway ..> kapture : SSE (planned)
 agentgateway ..> langfuse_mcp : SSE (planned)
 
 ' stdio-proxy to stdio MCPs
 stdio_proxy --> seq_think : stdio
 stdio_proxy --> memory : stdio
+stdio_proxy --> kapture_mcp : stdio
 
 ' Langfuse MCP to Langfuse platform
 langfuse_mcp ..> langfuse : API (planned)
@@ -97,7 +97,47 @@ endlegend
 | agentgateway | ✅ Running | - |
 | sequential-thinking | ✅ Running | 1 |
 | memory | ✅ Running | 8 |
-| **Total** | | **9 tools** |
+| kapture | ✅ Configured | 15+ |
+| **Total** | | **24+ tools** |
+
+## Network Architecture
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│ HOST                                                                │
+│                                                                     │
+│   Chrome ─────────────────────────┐                                 │
+│     ├─ Kapture Extension ─────────┼─── ws://localhost:61822 ────┐   │
+│     └─ DevTools (:9222) ◄─────────┼─── (CDP from containers) ◄──┼─┐ │
+│                                   │                             │ │ │
+│   AI Clients ─────────────────────┼─── http://localhost:3847 ───┼─┼─┤
+│                                   │                             │ │ │
+└───────────────────────────────────┼─────────────────────────────┼─┼─┘
+                                    │                             │ │
+┌───────────────────────────────────┼─────────────────────────────┼─┼─┐
+│ DOCKER                            │                             │ │ │
+│                                   ▼                             │ │ │
+│   ┌─────────────────────────────────────────────────────────┐   │ │ │
+│   │ stdio-proxy                                             │   │ │ │
+│   │   :7030 (SSE) ◄── agentgateway                          │◄──┘ │ │
+│   │   :61822 (WS) ◄── Kapture extension connects here       │     │ │
+│   └─────────────────────────────────────────────────────────┘     │ │
+│                                                                   │ │
+│   ┌─────────────────────────────────────────────────────────┐     │ │
+│   │ agentgateway :3847 ◄──────────────────────────────────────────┘ │
+│   └─────────────────────────────────────────────────────────┘       │
+│                                                                     │
+│   ┌─────────────────────────────────────────────────────────┐       │
+│   │ nginx-proxy                                             │       │
+│   │   :9223 ──► host.docker.internal:9222 (CDP to Chrome) ──────────┘
+│   │   :3443 ──► agentgateway:3847 (HTTPS termination)       │
+│   └─────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────┘
+
+Connection directions:
+  ──►  Outbound (container → host) - needs proxy
+  ◄──  Inbound (host → container) - direct port exposure
+```
 
 ## Directory Structure
 
@@ -200,7 +240,13 @@ See [clients/](clients/) for configuration examples for each AI client.
 | 15001 | agentgateway Admin UI | HTTP |
 | 3443 | agentgateway MCP (SSL) | HTTPS |
 | 7030 | stdio-proxy | SSE |
+| 61822 | Kapture WebSocket | WebSocket |
 | 3000 | Langfuse (planned) | HTTP |
+
+## TODO
+
+- [ ] Evaluate using agentgateway's native TLS instead of nginx-proxy for HTTPS termination
+- [ ] Keep nginx-proxy for CDP proxy (9223) - needed for Playwright/browser-use MCPs to connect to host Chrome
 
 ## Resources
 

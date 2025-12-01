@@ -24,6 +24,9 @@ binds:
           - name: memory
             sse:
               host: http://host.docker.internal:7030/servers/memory/sse
+          - name: kapture
+            sse:
+              host: http://host.docker.internal:7030/servers/kapture/sse
 
           # SSE-based MCP servers (running in separate containers)
           - name: context7
