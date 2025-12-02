@@ -1,3 +1,6 @@
+include:
+  - path: ../../mcps/stdio-proxy/docker-compose.yml
+
 services:
   # agentgateway - MCP Gateway/Proxy
   agentgateway:
@@ -16,8 +19,25 @@ services:
       - "host.docker.internal:host-gateway"
     dns:
       - 127.0.0.11  # Docker embedded DNS
+    # Wait for stdio-proxy to be fully ready (warmed up) before starting
+    depends_on:
+      stdio-proxy:
+        condition: service_healthy
     networks:
       - ai-infrastructure
+
+  # Debug sidecar for troubleshooting network connectivity
+  debug:
+    image: nicolaka/netshoot:latest
+    container_name: agentgateway-debug
+    profiles: ["debug"]  # Only starts with: docker compose --profile debug up -d debug
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - ai-infrastructure
+    command: ["sleep", "infinity"]
 
   # NGINX SSL/WebSocket Proxy
   nginx-proxy:

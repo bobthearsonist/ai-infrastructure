@@ -14,5 +14,6 @@ COPY servers.json /config/servers.json
 EXPOSE 7030
 
 # Run mcp-proxy with named server config
+# mcp-proxy eagerly initializes all MCPs at startup before listening
 ENTRYPOINT ["mcp-proxy"]
-CMD ["--host", "0.0.0.0", "--port", "7030", "--named-server-config", "/config/servers.json"]
+CMD ["--host", "0.0.0.0", "--port", "7030", "--named-server-config", "/config/servers.json", "--debug"]

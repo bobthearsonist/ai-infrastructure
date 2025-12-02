@@ -21,16 +21,16 @@ agentgateway is an open-source MCP gateway/proxy from the Linux Foundation. It s
 
 ## Configured Backends
 
-| MCP Server | Status | Transport | Source | Docs |
-| ---------- | ------ | --------- | ------ | ---- |
-| sequential-thinking | ✅ Running | SSE | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/sequential-thinking/readme.md) |
-| memory | ✅ Running | SSE | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/memory/readme.md) |
-| kapture | ✅ Running | SSE + WebSocket | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/kapture/readme.md) |
-| context7 | ✅ Running | SSE | container | [→](../../mcps/context7/readme.md) |
-| playwright | ✅ Running | SSE | container | [→](../../mcps/playwright/readme.md) |
-| browser-use | ✅ Running | SSE | container | [→](../../mcps/browser-use/readme.md) |
-| hass-mcp | ✅ Running | SSE | container | [→](../../mcps/hass-mcp/readme.md) |
-| langfuse-mcp | ⏳ Planned | SSE | container | [→](../../services/langfuse/readme.md) |
+| MCP Server          | Status     | Transport       | Source                                          | Docs                                          |
+| ------------------- | ---------- | --------------- | ----------------------------------------------- | --------------------------------------------- |
+| sequential-thinking | ✅ Running | SSE             | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/sequential-thinking/readme.md) |
+| memory              | ✅ Running | SSE             | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/memory/readme.md)              |
+| kapture             | ✅ Running | SSE + WebSocket | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/kapture/readme.md)             |
+| context7            | ✅ Running | SSE             | container                                       | [→](../../mcps/context7/readme.md)            |
+| playwright          | ✅ Running | SSE             | container                                       | [→](../../mcps/playwright/readme.md)          |
+| browser-use         | ✅ Running | SSE             | container                                       | [→](../../mcps/browser-use/readme.md)         |
+| hass-mcp            | ✅ Running | SSE             | container                                       | [→](../../mcps/hass-mcp/readme.md)            |
+| langfuse-prompts    | ✅ Running | MCP             | container                                       | [→](../../platform/langfuse/README.md)        |
 
 ## Setup
 
@@ -102,6 +102,63 @@ backends:
    docker-compose restart agentgateway
    ```
 
+### MCP Backend Architecture (Important!)
+
+⚠️ **All MCP targets must be in a single `- mcp:` backend block.** This is by design.
+
+**Why?** From the agentgateway source code (`router.rs`):
+
+```rust
+pub struct McpBackendGroup {
+    pub targets: Vec<Arc<McpTarget>>,  // Vector of targets in ONE group
+    pub stateful: bool,                 // Single stateful mode for whole group
+}
+```
+
+**Design rationale:**
+
+1. **Multiplexing Pattern**: agentgateway federates tools from multiple MCP servers into a unified interface. The `backends` array at route level is for **different protocol types** (MCP/A2A/OpenAPI), not for separating MCP targets.
+
+2. **Stateful Mode Scope**: `statefulMode` applies to the entire backend group - session management must be consistent across all targets.
+
+3. **Tool Namespace**: If you use multiple `- mcp:` blocks, only the last one's tools will be returned. The gateway merges multiple **targets** within a single MCP backend, not multiple MCP backend groups.
+
+**Correct configuration:**
+
+```yaml
+backends:
+  - mcp:
+      statefulMode: stateless
+      targets:
+        - name: server-a
+          sse:
+            host: http://host.docker.internal:7001/sse
+        - name: server-b
+          sse:
+            host: http://host.docker.internal:7002/sse
+        - name: server-c
+          mcp:
+            host: http://host.docker.internal:7003/mcp
+```
+
+**Incorrect configuration (only server-c tools returned):**
+
+```yaml
+backends:
+  - mcp:
+      targets:
+        - name: server-a
+          sse:
+            host: http://host.docker.internal:7001/sse
+  - mcp: # ❌ Second mcp block overwrites first!
+      targets:
+        - name: server-c
+          mcp:
+            host: http://host.docker.internal:7003/mcp
+```
+
+See [MCP Multiplexing documentation](https://agentgateway.dev/docs/mcp/connect/multiplex/) for more details.
+
 ### DNS Notes
 
 Use `host.docker.internal:PORT` for backend URLs. Container-to-container DNS doesn't work reliably with agentgateway's Go resolver.
@@ -110,45 +167,45 @@ Use `host.docker.internal:PORT` for backend URLs. Container-to-container DNS doe
 
 agentgateway provides enterprise features not available in simpler gateways:
 
-| Feature | Description |
-| ------- | ----------- |
-| **Authentication** | JWT, OAuth2 support |
-| **Authorization** | CEL-based RBAC policies |
-| **Rate Limiting** | Per-client rate limits |
-| **Native TLS** | Built-in SSL/TLS |
-| **OpenAPI → MCP** | Convert OpenAPI specs to MCP |
-| **A2A Protocol** | Agent-to-agent communication |
-| **Hot Reload** | Config updates via xDS |
+| Feature            | Description                  |
+| ------------------ | ---------------------------- |
+| **Authentication** | JWT, OAuth2 support          |
+| **Authorization**  | CEL-based RBAC policies      |
+| **Rate Limiting**  | Per-client rate limits       |
+| **Native TLS**     | Built-in SSL/TLS             |
+| **OpenAPI → MCP**  | Convert OpenAPI specs to MCP |
+| **A2A Protocol**   | Agent-to-agent communication |
+| **Hot Reload**     | Config updates via xDS       |
 
 ## Comparison to MCPX
 
-| Feature | MCPX | agentgateway |
-| ------- | ---- | ------------ |
-| MCP Gateway | ✅ | ✅ |
-| Authentication | ❌ | ✅ |
-| Authorization/RBAC | ❌ | ✅ |
-| Native TLS | ❌ | ✅ |
-| Rate Limiting | ❌ | ✅ |
-| Hot Reload | ❌ | ✅ |
+| Feature            | MCPX | agentgateway |
+| ------------------ | ---- | ------------ |
+| MCP Gateway        | ✅   | ✅           |
+| Authentication     | ❌   | ✅           |
+| Authorization/RBAC | ❌   | ✅           |
+| Native TLS         | ❌   | ✅           |
+| Rate Limiting      | ❌   | ✅           |
+| Hot Reload         | ❌   | ✅           |
 
 ## Docker Compose
 
 This setup runs two containers:
 
-| Container | Image | Purpose |
-| --------- | ----- | ------- |
+| Container    | Image                               | Purpose                        |
+| ------------ | ----------------------------------- | ------------------------------ |
 | agentgateway | `ghcr.io/agentgateway/agentgateway` | MCP gateway (Linux Foundation) |
-| nginx-proxy | `nginx:alpine` | SSL termination, CDP proxy |
+| nginx-proxy  | `nginx:alpine`                      | SSL termination, CDP proxy     |
 
 ### nginx-proxy
 
 The nginx-proxy is our custom addition (not part of agentgateway) that provides:
 
-| Port | Purpose | Direction |
-|------|---------|-----------|
-| 3443 | HTTPS MCP endpoint | Clients → agentgateway |
-| 15443 | HTTPS Admin UI | Browser → agentgateway |
-| 9223 | CDP proxy | Containers → host Chrome:9222 |
+| Port  | Purpose            | Direction                     |
+| ----- | ------------------ | ----------------------------- |
+| 3443  | HTTPS MCP endpoint | Clients → agentgateway        |
+| 15443 | HTTPS Admin UI     | Browser → agentgateway        |
+| 9223  | CDP proxy          | Containers → host Chrome:9222 |
 
 **Why CDP proxy?** Playwright and browser-use MCPs run inside Docker containers but need to control Chrome running on the host. Containers can't reach `localhost:9222` directly, so nginx proxies `host.docker.internal:9223` → `host:9222`.
 
@@ -167,9 +224,9 @@ If you see "backends required DNS resolution which failed":
 
 Expected - some MCP backends don't implement prompts. Doesn't affect tool discovery.
 
-### Slow Initial Response
+### resources/list Errors
 
-First request takes ~4 seconds as agentgateway queries all backends. Subsequent requests are faster.
+TODO: fil in details of cline error here
 
 ## TODO
 
@@ -183,4 +240,4 @@ First request takes ~4 seconds as agentgateway queries all backends. Subsequent 
 
 - [Client Configuration](../../clients/) - Configure AI clients to connect
 - [stdio-proxy](../../mcps/stdio-proxy/readme.md) - stdio→SSE bridge for MCPs
-- [Langfuse](../../services/langfuse/readme.md) - LLM observability platform (planned)
+- [Langfuse](../../platform/langfuse/README.md) - LLM observability platform

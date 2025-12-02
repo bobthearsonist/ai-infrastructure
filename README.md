@@ -47,9 +47,9 @@ package "SSE MCPs" as sse_mcps #FFF3E0 {
 }
 
 ' === Platform Services ===
-package "Platform Services (Planned)" as platform #F3E5F5 {
-  [Langfuse\n(LLM Observability)] as langfuse #CE93D8
-  [langfuse-mcp\n:7012] as langfuse_mcp #CE93D8
+package "Platform Services" as platform #F3E5F5 {
+  [Langfuse\n:3100 (UI)\n(LLM Observability)] as langfuse #CE93D8
+  [langfuse-mcp\n:7012] as langfuse_mcp #E1BEE7
 }
 
 ' === Observability Stack ===
@@ -76,7 +76,7 @@ agentgateway --> context7 : SSE
 agentgateway --> playwright : SSE
 agentgateway --> browser_use : SSE
 agentgateway --> hass_mcp : SSE
-agentgateway ..> langfuse_mcp : SSE (planned)
+agentgateway --> langfuse_mcp : MCP
 
 ' stdio-proxy to stdio MCPs
 stdio_proxy --> seq_think : stdio
@@ -84,7 +84,10 @@ stdio_proxy --> memory : stdio
 stdio_proxy --> kapture_mcp : stdio
 
 ' Langfuse MCP to Langfuse platform
-langfuse_mcp ..> langfuse : API (planned)
+langfuse_mcp --> langfuse : API
+
+' Browser to Langfuse
+browser .up.> langfuse : UI
 
 ' Observability connections
 agentgateway --> otel : OTLP traces
@@ -98,9 +101,10 @@ grafana --> jaeger : query
 legend right
   |= Color |= Status |
   | <#C8E6C9> | Gateway |
-  | <#FFCC80> | Running |
+  | <#FFCC80> | Running MCP |
   | <#81D4FA> | Observability |
-  | <#CE93D8> | Planned Platform |
+  | <#CE93D8> | Platform Service |
+  | <#E1BEE7> | Planned |
 endlegend
 
 @enduml
@@ -118,6 +122,7 @@ endlegend
 | playwright | ✅ Running | 15+ |
 | browser-use | ✅ Running | 10+ |
 | hass-mcp | ✅ Running | 5+ |
+| langfuse | ✅ Available | - |
 | **Total** | | **56+ tools** |
 
 ## Network Architecture
@@ -146,6 +151,7 @@ rectangle "DOCKER (ai-infrastructure network)" as docker {
   rectangle ":3000 Grafana" as grafana #81D4FA
   rectangle ":9090 Prometheus" as prom #81D4FA
   rectangle ":16686 Jaeger" as jaeger #81D4FA
+  rectangle ":3100 Langfuse" as langfuse #CE93D8
 }
 
 clients -down-> gw : "HTTP :3847"
@@ -153,6 +159,7 @@ clients -down-> admin : "HTTP :15001"
 browser -down-> grafana : ":3000"
 browser -down-> prom : ":9090"
 browser -down-> jaeger : ":16686"
+browser -down-> langfuse : ":3100"
 nginx -up-> chrome : "CDP :9223→:9222"
 
 @enduml
@@ -191,8 +198,8 @@ ai-infrastructure/
 │   ├── playwright/    # Playwright browser automation
 │   ├── sequential-thinking/ # Chain of thought reasoning
 │   └── stdio-proxy/   # stdio→SSE bridge
-├── services/          # Platform services
-│   ├── langfuse/      # LLM observability & prompts (planned)
+├── platform/          # Platform services
+│   ├── langfuse/      # LLM observability, prompts, evals
 │   └── observability/ # Prometheus, Grafana, Jaeger
 └── workflows/         # Custom workflow definitions
 ```
@@ -222,8 +229,8 @@ ai-infrastructure/
 
 | Service | Description | Status | Docs |
 | ------- | ----------- | ------ | ---- |
-| [Observability](services/observability/readme.md) | Prometheus, Grafana, Jaeger | ✅ Running | [→](services/observability/readme.md) |
-| [Langfuse](services/langfuse/readme.md) | LLM observability, prompts, evals | ⏳ Planned | [→](services/langfuse/readme.md) |
+| [Observability](platform/observability/readme.md) | Prometheus, Grafana, Jaeger | ✅ Running | [→](platform/observability/readme.md) |
+| [Langfuse](platform/langfuse/README.md) | LLM observability, prompts, evals | ✅ Available | [→](platform/langfuse/README.md) |
 
 ### Clients
 
@@ -260,17 +267,25 @@ docker-compose up -d
 ### 4. Start observability stack (optional)
 
 ```bash
-cd services/observability
+cd platform/observability
 docker-compose up -d
 ```
 
-### 5. Access
+### 5. Start Langfuse (optional)
+
+```bash
+cd platform/langfuse
+docker compose up -d
+```
+
+### 6. Access
 
 - **MCP Endpoint**: `http://localhost:3847/mcp`
 - **Admin UI**: `http://localhost:15001/ui`
 - **Grafana**: `http://localhost:3000` (admin/admin)
+- **Langfuse**: `http://localhost:3100` (create account on first visit)
 
-### 6. Configure your AI client
+### 8. Configure your AI client
 
 See [clients/](clients/) for configuration examples for each AI client.
 
@@ -288,6 +303,8 @@ See [clients/](clients/) for configuration examples for each AI client.
 | 16686 | Jaeger UI | HTTP | Trace visualization |
 | 9090 | Prometheus | HTTP | Metrics UI & API |
 | 3000 | Grafana | HTTP | Dashboards (admin/admin) |
+| 3100 | Langfuse | HTTP | LLM observability UI |
+| 9190 | Langfuse MinIO | HTTP | S3-compatible storage |
 | 4317/4318 | OTel Collector | gRPC/HTTP | Internal only (Docker network) |
 | 8889 | OTel Collector Metrics | Prometheus | Span metrics (internal) |
 
@@ -302,6 +319,7 @@ The observability stack provides metrics, tracing, and visualization:
 | Prometheus | [:9090](http://localhost:9090) | Metrics storage and queries |
 | Grafana | [:3000](http://localhost:3000) | Dashboards (admin/admin) |
 | Jaeger | [:16686](http://localhost:16686) | Distributed tracing |
+| Langfuse | [:3100](http://localhost:3100) | LLM observability & prompts |
 | OpenTelemetry Collector | :4317/:4318 (internal) | Trace processing & span metrics |
 
 **Trace Flow:**
@@ -322,13 +340,12 @@ agentgateway → OTel Collector → Jaeger (traces)
 ## TODO
 
 - [ ] Evaluate using agentgateway's native TLS instead of nginx-proxy for HTTPS termination
-- [ ] Keep nginx-proxy for CDP proxy (9223) - needed for Playwright/browser-use MCPs to connect to host Chrome
+- [ ] Configure Playwright MCP with CDP proxy (nginx-proxy on 9223 needed for browser-use MCPs to connect to host Chrome)
 - [x] Add client identification headers for per-client tracking
 - [x] Set up Jaeger for distributed tracing
 - [x] Configure agentgateway to send traces to OpenTelemetry Collector
 - [x] Create Grafana dashboard for metrics visualization
-- [ ] Set up Langfuse for LLM observability and prompt management
-- [ ] Configure Playwright MCP with CDP proxy
+- [x] Set up Langfuse for LLM observability and prompt management
 
 ## Resources
 

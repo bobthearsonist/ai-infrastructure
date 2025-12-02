@@ -1,46 +1,50 @@
 # Top-level config settings
 config:
-  adminAddr: "0.0.0.0:15000"
+  adminAddr: '0.0.0.0:15000'
   tracing:
     otlpEndpoint: http://host.docker.internal:4317
     randomSampling: true
 
 binds:
-- port: 3847
-  listeners:
-  - name: mcp-gateway
-    routes:
-    - name: mcp-tools
-      policies:
-        cors:
-          allowOrigins:
-            - "*"
-          allowHeaders:
-            - "*"
-      backends:
-      - mcp:
-          targets:
-          # MCP servers via stdio-proxy
-          - name: sequential-thinking
-            sse:
-              host: http://host.docker.internal:7030/servers/sequential-thinking/sse
-          - name: memory
-            sse:
-              host: http://host.docker.internal:7030/servers/memory/sse
-          - name: kapture
-            sse:
-              host: http://host.docker.internal:7030/servers/kapture/sse
-
-          # SSE-based MCP servers (running in separate containers)
-          - name: context7
-            sse:
-              host: http://host.docker.internal:7008/sse
-          - name: playwright
-            sse:
-              host: http://host.docker.internal:7007/sse
-          - name: browser-use
-            sse:
-              host: http://host.docker.internal:7011/sse
-          - name: hass-mcp
-            sse:
-              host: http://host.docker.internal:7010/sse
+  - port: 3847
+    listeners:
+      - name: mcp-gateway
+        routes:
+          - name: mcp-tools
+            policies:
+              cors:
+                allowOrigins:
+                  - '*'
+                allowHeaders:
+                  - '*'
+            backends:
+              # Backend 1: SSE-proxied stdio MCPs (stateless - auto-reinitializes sessions)
+              - mcp:
+                  statefulMode: stateless
+                  targets:
+                    - name: sequential-thinking
+                      sse:
+                        host: http://host.docker.internal:7030/servers/sequential-thinking/sse
+                    - name: memory
+                      sse:
+                        host: http://host.docker.internal:7030/servers/memory/sse
+                    - name: kapture
+                      sse:
+                        host: http://host.docker.internal:7030/servers/kapture/sse
+                    # SSE-based MCP servers (stateless - auto-reinitializes sessions)
+                    - name: context7
+                      sse:
+                        host: http://host.docker.internal:7008/sse
+                    - name: playwright
+                      sse:
+                        host: http://host.docker.internal:7007/sse
+                    - name: browser-use
+                      sse:
+                        host: http://host.docker.internal:7011/sse
+                    - name: hass-mcp
+                      sse:
+                        host: http://host.docker.internal:7010/sse
+                    # Langfuse Prompt Management MCP (via auth proxy)
+                    - name: langfuse-prompts
+                      mcp:
+                        host: http://host.docker.internal:3101/api/public/mcp

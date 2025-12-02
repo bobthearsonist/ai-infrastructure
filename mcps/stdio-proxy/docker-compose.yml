@@ -15,11 +15,13 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
+      # mcp-proxy only starts listening AFTER all MCPs are initialized
+      # So if /status responds, the MCPs are ready
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7030/status || exit 1"]
-      interval: 15s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s  # Allow time for npx to download packages on first run
     networks:
       - ai-infrastructure
 

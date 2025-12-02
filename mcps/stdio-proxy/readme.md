@@ -8,26 +8,26 @@ Runs multiple stdio-based MCP servers as SSE endpoints using [mcp-proxy](https:/
 
 ## Servers
 
-| Server | Tools | Endpoint |
-|--------|-------|----------|
-| sequential-thinking | 1 | `/servers/sequential-thinking/sse` |
-| memory | 8 | `/servers/memory/sse` |
-| kapture | 15+ | `/servers/kapture/sse` |
+| Server              | Tools | Endpoint                           |
+| ------------------- | ----- | ---------------------------------- |
+| sequential-thinking | 1     | `/servers/sequential-thinking/sse` |
+| memory              | 8     | `/servers/memory/sse`              |
+| kapture             | 15+   | `/servers/kapture/sse`             |
 
 ## Endpoints
 
 The stdio-proxy exposes each MCP server at a unique SSE endpoint:
 
-| MCP | URL |
-|-----|-----|
+| MCP                 | URL                                                     |
+| ------------------- | ------------------------------------------------------- |
 | sequential-thinking | `http://localhost:7030/servers/sequential-thinking/sse` |
-| memory | `http://localhost:7030/servers/memory/sse` |
-| kapture | `http://localhost:7030/servers/kapture/sse` |
+| memory              | `http://localhost:7030/servers/memory/sse`              |
+| kapture             | `http://localhost:7030/servers/kapture/sse`             |
 
 ### Special Ports
 
-| Port | Purpose |
-|------|--------|
+| Port  | Purpose                                                   |
+| ----- | --------------------------------------------------------- |
 | 61822 | Kapture WebSocket bridge (Chrome extension connects here) |
 
 These endpoints are consumed by agentgateway, which aggregates them into a single MCP interface.
@@ -106,13 +106,45 @@ The `servers.json` file defines which MCP servers to run:
 
 The container exposes port `7030` for SSE connections.
 
+### Debug Mode
+
+The container runs with `--debug` enabled by default in the Dockerfile:
+
+```dockerfile
+CMD ["--host", "0.0.0.0", "--port", "7030", "--named-server-config", "/config/servers.json", "--debug"]
+```
+
+This provides verbose logging useful for:
+
+- Troubleshooting MCP server initialization issues
+- Debugging SSE connection lifecycle (session creation, disconnects)
+- Monitoring JSON-RPC requests and responses
+- Diagnosing agentgateway integration issues (e.g., `tools/list` timeouts)
+
+#### Debug Log Examples
+
+```
+[D] mcp.server.sse] Created new session with ID: 7be4ba49-...
+[D] mcp.server.sse] Received JSON: {"jsonrpc":"2.0","method":"initialize"...}
+[D] sse_starlette.sse] ping: b': ping - 2025-12-02 18:23:01...
+[D] sse_starlette.sse] Got event: http.disconnect. Stop streaming.
+```
+
+#### Disabling Debug Mode
+
+To disable debug mode for production, edit the `Dockerfile` and remove `--debug` from the CMD line:
+
+```dockerfile
+CMD ["--host", "0.0.0.0", "--port", "7030", "--named-server-config", "/config/servers.json"]
+```
+
 ## Why mcp-proxy over supergateway?
 
-| | [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) | [supergateway](https://github.com/supercorp-ai/supergateway) |
-|---|------------|--------------|
-| Multi-server | ✅ Single config file, single port | ❌ Separate process per server |
-| Routing | `/servers/{name}/sse` | Multiple ports |
-| Consistency | Already used in browser-use, hass-mcp | New dependency |
+|              | [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) | [supergateway](https://github.com/supercorp-ai/supergateway) |
+| ------------ | ---------------------------------------------------- | ------------------------------------------------------------ |
+| Multi-server | ✅ Single config file, single port                   | ❌ Separate process per server                               |
+| Routing      | `/servers/{name}/sse`                                | Multiple ports                                               |
+| Consistency  | Already used in browser-use, hass-mcp                | New dependency                                               |
 
 Both are excellent. We chose mcp-proxy for JSON config simplicity and project consistency.
 
