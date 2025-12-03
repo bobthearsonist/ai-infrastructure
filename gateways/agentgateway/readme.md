@@ -159,6 +159,37 @@ backends:
 
 See [MCP Multiplexing documentation](https://agentgateway.dev/docs/mcp/connect/multiplex/) for more details.
 
+### SSE Endpoints Require Stateless Mode
+
+⚠️ **Always use `statefulMode: stateless` when connecting to SSE-based MCP servers.**
+
+**The Problem**: SSE (Server-Sent Events) connections have a lifecycle mismatch with MCP session semantics.
+
+1. **SSE Connection Lifecycle**: An SSE connection is a long-lived HTTP GET request. When agentgateway closes the connection after receiving a response, the SSE session on the server is destroyed.
+
+2. **MCP Session Semantics**: MCP expects sessions to persist across multiple requests. After `initialize`, subsequent calls like `tools/list` should reuse the same session.
+
+3. **The Mismatch**:
+   - agentgateway opens SSE connection, sends `initialize`, gets response
+   - SSE connection closes (HTTP disconnect)
+   - Server destroys the session
+   - Later, `tools/list` arrives with the same session ID
+   - Server rejects: "Received request before initialization was complete"
+
+**The Solution**: `statefulMode: stateless` tells agentgateway to automatically wrap every request with a fresh `initialize` call, treating each request as an independent transaction.
+
+```yaml
+backends:
+  - mcp:
+      statefulMode: stateless  # Required for SSE targets
+      targets:
+        - name: sequential-thinking
+          sse:
+            host: http://host.docker.internal:7030/servers/sequential-thinking/sse
+```
+
+**Note**: This applies to SSE (`sse:`) transport. Streamable HTTP (`mcp:`) transport handles sessions differently and may work in stateful mode, but using stateless mode for mixed SSE/MCP backends is safe.
+
 ### DNS Notes
 
 Use `host.docker.internal:PORT` for backend URLs. Container-to-container DNS doesn't work reliably with agentgateway's Go resolver.
