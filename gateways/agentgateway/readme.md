@@ -255,9 +255,46 @@ If you see "backends required DNS resolution which failed":
 
 Expected - some MCP backends don't implement prompts. Doesn't affect tool discovery.
 
-### resources/list Errors
+### resources/list 500 Error (Multiplexing Limitation)
 
-TODO: fil in details of cline error here
+When using **more than one MCP target** (multiplexing mode), `resources/list` and `resources/templates/list` return HTTP 500 errors. **This is expected behavior**, not a bug.
+
+**What triggers multiplexing**: Having `backend.targets.len() > 1`. From the source (`handler.rs`):
+
+```rust
+let default_target_name = if backend.targets.len() != 1 {
+    is_multiplexing = true;  // More than 1 target = multiplexing
+    None
+} else {
+    Some(backend.targets[0].name.to_string())  // Single target = no multiplexing
+};
+```
+
+With our current 8 targets (sequential-thinking, memory, kapture, etc.), we're in multiplexing mode.
+
+**Why it happens**: agentgateway hasn't implemented URL mapping for resources in multiplexing mode. From `session.rs`:
+
+```rust
+ClientRequest::ListResourcesRequest(_) => {
+    if !self.relay.is_multiplexing() {
+        // Works with single target
+    } else {
+        // TODO(https://github.com/agentgateway/agentgateway/issues/404)
+        Err(UpstreamError::InvalidMethodWithMultiplexing(...))
+    }
+}
+```
+
+**Why tools work but resources don't**:
+
+- `tools/list` - Tool names get prefixed with target name (e.g., `context7_resolve-library-id`)
+- `resources/list` - Would need URL rewriting/mapping which isn't implemented yet
+
+**Resolution options**:
+
+1. **Accept the limitation** - If you don't need MCP resources, ignore the 500s. Tool discovery works fine.
+2. **Use single target** - Resources work with only one MCP target configured.
+3. **Track upstream** - [agentgateway/agentgateway#404](https://github.com/agentgateway/agentgateway/issues/404)
 
 ## TODO
 
