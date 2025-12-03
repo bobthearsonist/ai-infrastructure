@@ -16,10 +16,11 @@ services:
       - ./data/playwright-cache:/root/.cache/ms-playwright
       # remove or adjust this if you don't need a custom profile dir:
       - ./data/playwright-profile:/home/pw/profile
-    # Healthcheck: the server exposes /mcp (and /sse for legacy).
-    # Note: if curl isn't in the image, comment this out or replace with a TCP check.
+    # Healthcheck: TCP port check using node (curl/wget not available in official image).
+    # The official Playwright MCP image intentionally has no /health endpoint to stay minimal.
+    # See rejected PR: https://github.com/microsoft/playwright-mcp/pull/1054
     healthcheck:
-      test: ['CMD', 'curl', '-fsS', 'http://localhost:7007/mcp']
+      test: ['CMD-SHELL', 'node -e "const net = require(\"net\"); const s = net.connect(7007, () => { s.end(); process.exit(0); }); s.on(\"error\", () => process.exit(1));"']
       interval: 15s
       timeout: 5s
       retries: 5

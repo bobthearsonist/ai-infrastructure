@@ -10,16 +10,10 @@ services:
       - '7008:7008' # Context7 MCP HTTP port
     networks:
       - ai-infrastructure
+    # Healthcheck: TCP port check since Context7 has no dedicated /health endpoint.
+    # The MCP exposes /mcp (streamable HTTP) and /sse (legacy SSE) but no health route.
     healthcheck:
-      test:
-        [
-          'CMD',
-          'wget',
-          '--quiet',
-          '--tries=1',
-          '--spider',
-          'http://localhost:7008/health',
-        ]
+      test: ['CMD-SHELL', 'nc -z localhost 7008 || exit 1']
       interval: 30s
       timeout: 10s
       retries: 3
