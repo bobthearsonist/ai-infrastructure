@@ -11,6 +11,8 @@ services:
       - "3847:3847" # MCP endpoint
       - "15001:15000" # UI (internal 15000 -> external 15001)
       - "15020:15020" # Metrics (Prometheus)
+    environment:
+      - RUST_LOG=debug
     volumes:
       - ./config.yaml:/config/config.yaml:ro
       - ./memory.json:/config/memory.json
