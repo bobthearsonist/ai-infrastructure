@@ -1,0 +1,23 @@
+# Dockerfile for adb-proxy-socket (Node WebSocket bridge)
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Clone the repo and extract only the proxy server
+RUN apk add --no-cache git && \
+    git clone --depth 1 https://github.com/mikechambers/adb-mcp.git /tmp/adb-mcp && \
+    cp -r /tmp/adb-mcp/adb-proxy-socket/* /app/ && \
+    rm -rf /tmp/adb-mcp && \
+    apk del git
+
+# Install dependencies
+RUN npm install
+
+# Expose WebSocket and HTTP ports
+EXPOSE 3001 3000
+
+# Health check on HTTP endpoint
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+
+CMD ["node", "proxy.js"]

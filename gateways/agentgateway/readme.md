@@ -303,6 +303,7 @@ ClientRequest::ListResourcesRequest(_) => {
 - [ ] Configure rate limiting
 - [ ] Set up xDS for hot-reload
 - [ ] Restrict sequential-thinking MCP to local models only (hosted models/agents like Cline and GitHub Copilot provide similar chain-of-thought functionality in the client)
+- [ ] reference the project plan https://github.com/orgs/agentgateway/projects/1/views/1
 
 ## Related
 

@@ -1,0 +1,28 @@
+services:
+  # WebSocket proxy for Adobe UXP plugin communication
+  # Photoshop MCP runs inside stdio-proxy, connects here via Docker network
+  adb-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    container_name: adb-proxy
+    restart: unless-stopped
+    ports:
+      - "3927:3001"  # WebSocket for Photoshop UXP plugin (host 3927 → container 3001)
+    networks:
+      - ai-infrastructure
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -tln | grep -q 3001 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# NOTE: Photoshop MCP now runs inside stdio-proxy container
+# See: ../stdio-proxy/docker-compose.yml
+# This container only runs the WebSocket proxy that bridges to the UXP plugin
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true

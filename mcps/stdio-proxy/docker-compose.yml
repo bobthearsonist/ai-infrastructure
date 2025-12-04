@@ -12,6 +12,8 @@ services:
       - ./servers.json:/config/servers.json:ro
       # Mount data directories from individual MCP folders
       - ../memory/data:/data/memory
+      # Local Python packages (build with: python -m build --outdir ~/.local-pypi)
+      - ~/.local-pypi:/local-pypi:ro
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
@@ -21,9 +23,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 60s  # Allow time for npx to download packages on first run
+      start_period: 90s  # Allow time for npx + uv to download packages on first run
     networks:
       - ai-infrastructure
+
+# NOTE: adb-proxy runs separately from mcps/adb-mcp/docker-compose.yml
+# Start it with: cd ../adb-mcp && docker-compose up -d adb-proxy
 
 networks:
   ai-infrastructure:

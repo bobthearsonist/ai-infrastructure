@@ -1,0 +1,30 @@
+# Dockerfile for Photoshop MCP server (Python)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install uv for fast Python package management
+RUN pip install --no-cache-dir uv
+
+# Copy MCP server files from local adb-mcp repo via additional_contexts
+# TODO: Switch to forked repo once fixes are verified and pushed
+COPY --from=adb-mcp-source /mcp/*.py /app/
+
+# Install dependencies
+RUN uv pip install --system \
+    fonttools \
+    python-socketio \
+    mcp \
+    requests \
+    websocket-client \
+    numpy
+
+# The MCP server communicates with the proxy via WebSocket
+ENV PROXY_URL=ws://adb-proxy:3001
+ENV PROXY_TIMEOUT=20
+ENV APPLICATION=photoshop
+# Optional: fonts configuration (compose mounts user fonts; system mounts are commented there)
+# ENV FONT_DIRS="/Users/${USER}/Library/Fonts:/System/Library/Fonts:/Library/Fonts"
+
+# Run the MCP server on stdio (agentgateway will connect via stdin/stdout)
+CMD ["python", "-u", "ps-mcp.py"]

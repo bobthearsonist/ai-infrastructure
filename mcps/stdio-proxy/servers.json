@@ -17,6 +17,13 @@
       "env": {
         "KAPTURE_BRIDGE_PORT": "61822"
       }
+    },
+    "photoshop": {
+      "command": "uvx",
+      "args": ["--find-links", "/local-pypi", "psmcp"],
+      "env": {
+        "PROXY_URL": "ws://adb-proxy:3001"
+      }
     }
   }
 }
