@@ -1,6 +1,6 @@
 # Context7 MCP Server Dockerfile
 # Based on official upstash/context7 repository
-FROM node:18-alpine
+FROM node:alpine
 
 WORKDIR /app
 
