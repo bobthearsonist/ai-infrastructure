@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker logs:*)",
+      "Bash(curl:*)",
+      "WebSearch",
+      "Bash(docker compose restart:*)",
+      "Bash(timeout 3 curl:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:agentgateway.dev)",
+      "WebFetch(domain:docs.solo.io)",
+      "Bash(timeout 2 curl:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(docker exec:*)",
+      "Bash(docker compose config:*)",
+      "Bash(docker inspect:*)",
+      "Bash(timeout 15 curl:*)",
+      "Bash(timeout 20 curl:*)",
+      "Bash(timeout 10 curl:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

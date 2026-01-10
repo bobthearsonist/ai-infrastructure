@@ -10,6 +10,8 @@
 clients/**/*.json
 clients/**/*.mcp
 clients/**/.claude
+clients/**/.yaml
+clients/**/.yml
 
 # IDE / Editor
 .history/

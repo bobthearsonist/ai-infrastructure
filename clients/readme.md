@@ -22,6 +22,12 @@ ln -s ~/.claude claude/.claude
 
 # Cline
 ln -s ~/Library/Application\ Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json cline/mcp_settings.json
+
+# Kilo Code (fork of Cline)
+ln -s ~/Library/Application\ Support/Code/User/globalStorage/kilocode.kilo-code/settings/mcp_settings.json kilocode/mcp_settings.json
+
+# Goose
+ln -s ~/.config/goose/config.yaml goose/config.yaml
 ```
 
 ## Connection Details
@@ -42,11 +48,13 @@ All clients use `mcp-remote` to bridge stdio→HTTP:
 
 Each client should include an `x-client-id` header for tracking in metrics and traces:
 
-| Client | Header Value |
-| ------ | ------------ |
+| Client          | Header Value                  |
+| --------------- | ----------------------------- |
 | VS Code Copilot | `x-client-id: vscode-copilot` |
-| Claude Desktop | `x-client-id: claude-desktop` |
-| Cline | `x-client-id: cline` |
+| Claude Desktop  | `x-client-id: claude-desktop` |
+| Cline           | `x-client-id: cline`          |
+| Kilo Code       | `x-client-id: kilocode`       |
+| Goose           | `x-client-id: goose`          |
 
 ### Why nvm?
 
