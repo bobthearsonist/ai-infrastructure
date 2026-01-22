@@ -36,8 +36,8 @@ binds:
                       sse:
                         host: http://host.docker.internal:7030/servers/photoshop/sse
                     - name: context7
-                      sse:
-                        host: http://host.docker.internal:7008/sse
+                      mcp:
+                        host: http://host.docker.internal:7008/mcp
                     - name: playwright
                       sse:
                         host: http://host.docker.internal:7007/sse
