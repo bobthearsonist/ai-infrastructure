@@ -20,6 +20,11 @@ ln -s ~/Library/Application\ Support/Claude/claude_desktop_config.json claude/cl
 ln -s ~/.claude.json claude/claude_code_config.json
 ln -s ~/.claude claude/.claude
 
+# Claude Code User Instructions, Agents, and Skills
+ln -s ~/Repositories/ai/AGENTS.md ~/.claude/claude.md
+ln -s ~/Repositories/ai/agents ~/.claude/agents
+ln -s ~/Repositories/ai/skills ~/.claude/skills
+
 # Cline
 ln -s ~/Library/Application\ Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json cline/mcp_settings.json
 
@@ -59,3 +64,27 @@ Each client should include an `x-client-id` header for tracking in metrics and t
 ### Why nvm?
 
 `mcp-remote` requires Node.js 20+. Since system Node versions vary, we use nvm to guarantee the correct version. The `>/dev/null 2>&1` suppresses nvm output that would interfere with the MCP protocol.
+
+## Claude Code User Instructions, Agents, and Skills
+
+Claude Code reads several user-level configuration paths:
+
+| Path | Purpose |
+| ---- | ------- |
+| `~/.claude/claude.md` | Global instructions for all sessions |
+| `~/.claude/agents/` | Custom agent definitions |
+| `~/.claude/skills/` | Personal skills (slash commands) available across all projects |
+
+All are symlinked to the centralized ai repository:
+
+```bash
+~/.claude/claude.md → ~/Repositories/ai/AGENTS.md
+~/.claude/agents    → ~/Repositories/ai/agents
+~/.claude/skills    → ~/Repositories/ai/skills
+```
+
+This allows:
+
+- **Single source of truth** for instructions, agents, and skills across all Claude Code sessions
+- **Version controlled** configuration via the ai repository
+- **Shared patterns** for memory, todo management, sequential thinking, and skill promotion
