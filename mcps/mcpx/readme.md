@@ -1,44 +1,88 @@
 # MCPX
 
-MCPX is a MCP gateway/proxy. It acts a common entrypoint for multiple MCP servers, routing requests to the appropriate backend based on the request parameters. It solves the problem of ai clients creating their own containers for each instance and instead allows the creation of a single container that can then be sahred between clients.
+MCPX is a MCP gateway/proxy by [Lunar.dev](https://docs.lunar.dev/mcpx/architecture). It acts as a common entrypoint for multiple MCP servers, routing requests to the appropriate backend. It solves the problem of AI clients creating their own containers for each MCP and instead provides a single gateway shared between clients.
 
-it also offers the ability to group tools from your MCP sets.
+Key features:
 
-see <https://docs.lunar.dev/> and <https://docs.lunar.dev/mcpx/architecture>
+- **Tool Groups** — named sets of tools assigned to clients/agents
+- **Agent Access Control** — per-consumer tool group permissions
+- **Tool Catalog** — customizable tool descriptions and visibility
+- **Metrics & Audit Logs** — usage stats and audit trail
+- **OAuth / API Key Auth** — secure access to gateway
+- **Disconnection-safe caching** — tool calls survive disconnections (v0.2.28+)
 
-## TODO
+See <https://docs.lunar.dev/> and <https://docs.lunar.dev/mcpx/architecture>
 
-- [ ] Add authentication support
-- [ ] add tool groups
-- [ ] compare to Atrax and MetaMCP to see if they are alternatives
+## MCP Servers
+
+| Server | Type | Source | Port |
+|--------|------|--------|------|
+| sequential-thinking | stdio (npx) | Built-in | — |
+| memory | stdio (npx) | Built-in | — |
+| kapture | stdio (npx) | Built-in | — |
+| photoshop | SSE | stdio-proxy | 7030 |
+| context7 | SSE | Container | 7008 |
+| playwright | SSE | Container | 7007 |
+| browser-use | SSE | Container | 7011 |
+| hass-mcp | SSE | Container | 7010 |
+
+## Tool Groups
+
+Defined in [app.yaml](app.yaml):
+
+| Group | Servers | Purpose |
+|-------|---------|---------|
+| core | sequential-thinking, memory | Always assigned — thinking + persistence |
+| coding | context7 | Library docs |
+| browser | kapture, playwright, browser-use | Browser automation |
+| home | hass-mcp | Home Assistant |
+| creative | photoshop | Adobe Photoshop |
+
+## Prerequisites
+
+- SSE-based MCPs (playwright, browser-use, hass-mcp, context7) must be running on the host
+- stdio-proxy must be running on port 7030 for photoshop
+- SSL certs in `./certs/tls/` for HTTPS (optional)
 
 ## Usage
 
-the <http://localhost:5173/dashboard> page shows the available MCP servers and their tools.
-
-## Setup
-
 ```bash
-docker build -t mcpx .
-docker run -p 5173:5173 mcpx
+# Pull latest and start
+docker compose pull && docker compose up -d
 ```
 
-the server needs to be restarted after changes to the [mcp.json](mcp.json) file.
+Dashboard: <http://localhost:5173/dashboard>
+
+### Endpoints
+
+| Protocol | HTTP | HTTPS |
+|----------|------|-------|
+| SSE | http://localhost:9000/sse | https://localhost:9443/sse |
+| MCP | http://localhost:9000/mcp | https://localhost:9443/mcp |
+| Dashboard | http://localhost:5173 | https://localhost:5443 |
 
 ## Configuration
 
-i had to modify the setup for claude desktop form the official docs.
+- [mcp.json](mcp.json) — MCP server definitions (restart required after changes)
+- [app.yaml](app.yaml) — Tool groups, permissions, auth settings
+- [docker-compose.yml](docker-compose.yml) — Container orchestration
+- [nginx.conf](nginx.conf) — SSL termination and WebSocket proxying
 
 ## HTTPS Support
 
-Some clients require HTTPS connections - the nginx SSL proxy provides this by terminating SSL and forwarding to MCPX.
+The nginx SSL proxy terminates TLS and forwards to MCPX. Requires certs at `./certs/tls/{cert,key}.pem`.
 
 ```bash
-# Start with SSL proxy
-docker-compose up -d
-
-# HTTPS endpoints
-https://localhost:9443/mcp   # MCP endpoint
-https://localhost:9443/sse   # SSE endpoint
-https://localhost:5443       # Dashboard
+# Generate self-signed certs for testing
+mkdir -p certs/tls
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout certs/tls/key.pem -out certs/tls/cert.pem \
+  -subj "/CN=localhost"
 ```
+
+## TODO
+
+- [ ] Configure authentication (API key or OAuth)
+- [ ] Test disconnection-safe caching with OpenCode
+- [ ] Set up consumer tags for per-client metrics
+- [ ] Compare to Atrax and MetaMCP as alternatives

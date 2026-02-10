@@ -1,23 +1,31 @@
 services:
   # MCPX Gateway - MCP Proxy Server
+  # https://docs.lunar.dev/mcpx/architecture
+  # Changelog: https://github.com/TheLunarCompany/lunar/blob/main/mcpx/CHANGELOG.md
   mcpx:
     image: us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest
     container_name: mcpx
     restart: unless-stopped
     privileged: true
     ports:
-      - "9000:9000" # MCPX API port
+      - "9000:9000" # MCPX API port (SSE + streamable HTTP)
       - "5173:5173" # Control Plane UI port
       - "9001:9001" # Internal webserver port
-      - "3000:3000" # Metrics port
+      - "3100:3000" # Metrics port (remapped from 3000 - conflict with other service)
     volumes:
       - ./:/lunar/packages/mcpx-server/config
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     networks:
       - ai-infrastructure
 
-  # Lunar Proxy - API Gateway
+  # Lunar Proxy - API Gateway (optional, for rate limiting / observability)
   lunar-proxy:
     image: lunarapi/lunar-proxy:latest
     container_name: lunar-proxy
@@ -55,7 +63,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - mcpx
+      mcpx:
+        condition: service_healthy
     networks:
       - ai-infrastructure
 

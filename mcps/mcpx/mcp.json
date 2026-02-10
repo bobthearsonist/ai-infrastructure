@@ -1,32 +1,47 @@
 {
   "mcpServers": {
     "browser-use": {
-      "url": "http://browser_use_proxy:7011/sse",
-      "type": "sse"
+      "url": "http://host.docker.internal:7011/sse",
+      "type": "sse",
+      "icon": "#2ECC71"
     },
     "hass-mcp": {
-      "url": "http://hass_mcp_proxy:7010/sse",
-      "type": "sse"
+      "url": "http://host.docker.internal:7010/sse",
+      "type": "sse",
+      "icon": "#41BDF5"
     },
     "playwright": {
-      "url": "http://mcp_playwright:7007/sse",
-      "type": "sse"
+      "url": "http://host.docker.internal:7007/sse",
+      "type": "sse",
+      "icon": "#45BA4B"
     },
     "context7": {
-      "url": "http://context7_mcp:7008/sse",
-      "type": "sse"
+      "url": "http://host.docker.internal:7008/mcp",
+      "type": "streamable-http",
+      "icon": "#8E44AD"
+    },
+    "photoshop": {
+      "url": "http://host.docker.internal:7030/servers/photoshop/sse",
+      "type": "sse",
+      "icon": "#31A8FF"
     },
     "sequential-thinking": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
       "env": {},
       "icon": "#EA8685"
     },
     "memory": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
       "env": {
         "MEMORY_FILE_PATH": "/lunar/packages/mcpx-server/config/memory.json"
       },
@@ -35,7 +50,11 @@
     "kapture": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "kapture-mcp", "bridge"],
+      "args": [
+        "-y",
+        "kapture-mcp",
+        "bridge"
+      ],
       "env": {},
       "icon": "#D35400"
     }
