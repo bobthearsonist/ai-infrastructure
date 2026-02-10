@@ -47,7 +47,11 @@ binds:
                     - name: hass-mcp
                       sse:
                         host: http://host.docker.internal:7010/sse
-                    # Langfuse Prompt Management MCP (via auth proxy)
-                    - name: langfuse-prompts
-                      mcp:
-                        host: http://host.docker.internal:3101/api/public/mcp
+                    # TODO: Fix langfuse-prompts - needs langfuse stack running on :3101
+                    # - name: langfuse-prompts
+                    #   mcp:
+                    #     host: http://host.docker.internal:3101/api/public/mcp
+                    # TODO: Fix obsidian MCP - needs Obsidian running with semantic plugin on :3001
+                    # - name: obsidian
+                    #   mcp:
+                    #     host: http://host.docker.internal:3001/mcp

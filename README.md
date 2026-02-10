@@ -339,6 +339,8 @@ agentgateway → OTel Collector → Jaeger (traces)
 
 ## TODO
 
+- [ ] Fix langfuse-prompts MCP backend - Langfuse stack (:3101) not running; agentgateway fails to initialize when this upstream is unreachable. Need to either ensure langfuse starts with the gateway or handle gracefully.
+- [ ] Fix obsidian MCP backend - Obsidian semantic plugin (:3001) not running; same issue as langfuse. Need to either auto-start or make the gateway tolerant of missing optional backends.
 - [ ] Evaluate using agentgateway's native TLS instead of nginx-proxy for HTTPS termination
 - [ ] Configure Playwright MCP with CDP proxy (nginx-proxy on 9223 needed for browser-use MCPs to connect to host Chrome)
 - [x] Add client identification headers for per-client tracking
