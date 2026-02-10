@@ -16,7 +16,8 @@
       "Bash(docker inspect:*)",
       "Bash(timeout 15 curl:*)",
       "Bash(timeout 20 curl:*)",
-      "Bash(timeout 10 curl:*)"
+      "Bash(timeout 10 curl:*)",
+      "mcp__agentgateway__memory_search_nodes"
     ],
     "deny": [],
     "ask": []

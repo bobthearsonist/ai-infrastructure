@@ -1,3 +1,6 @@
+# Worktrees
+.worktrees/
+
 # Environment files with secrets
 .env
 *.env.local
@@ -52,3 +55,6 @@ __pycache__/
 *_dsa
 *_ecdsa
 *_ed25519
+
+# Session notes (may contain sensitive session data)
+docs/session-thought.md
