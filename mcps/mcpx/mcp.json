@@ -25,23 +25,27 @@
       "type": "sse",
       "icon": "#31A8FF"
     },
+    "qdrant-work": {
+      "url": "http://host.docker.internal:7020/servers/qdrant-work/sse",
+      "type": "sse",
+      "icon": "#DC382D"
+    },
+    "qdrant-personal": {
+      "url": "http://host.docker.internal:7020/servers/qdrant-personal/sse",
+      "type": "sse",
+      "icon": "#E74C3C"
+    },
     "sequential-thinking": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ],
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
       "env": {},
       "icon": "#EA8685"
     },
     "memory": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-memory"
-      ],
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
       "env": {
         "MEMORY_FILE_PATH": "/lunar/packages/mcpx-server/config/memory.json"
       },
@@ -50,11 +54,7 @@
     "kapture": {
       "type": "stdio",
       "command": "npx",
-      "args": [
-        "-y",
-        "kapture-mcp",
-        "bridge"
-      ],
+      "args": ["-y", "kapture-mcp", "bridge"],
       "env": {},
       "icon": "#D35400"
     }

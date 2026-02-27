@@ -44,6 +44,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.venv/
+
+# Qdrant indexer state
+mcps/qdrant-mcp/indexer/.index_state.json
 
 # Docker
 *.log
@@ -56,5 +60,5 @@ __pycache__/
 *_ecdsa
 *_ed25519
 
-# Session notes (may contain sensitive session data)
-docs/session-thought.md
+# MCP memory/knowledge graph data
+mcps/memory/data/

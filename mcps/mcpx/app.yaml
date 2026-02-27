@@ -7,68 +7,84 @@ permissions:
       _type: default-block
       consumerGroupKey: claude-ai (via mcp-remote 0.1.30) Profile
       allow:
-      - core
-      - browser
+        - core
+        - browser
     VSCode:
       _type: default-block
       consumerGroupKey: Visual Studio Code (via mcp-remote 0.1.31) Profile
       allow:
-      - core
-      - browser
+        - core
+        - browser
     OpenCode:
       _type: default-block
       consumerGroupKey: opencode Profile
       allow:
-      - core
-      - coding
-      - browser
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - browser
     Copilot:
       _type: default-block
       consumerGroupKey: vscode-copilot Profile
       allow:
-      - core
-      - coding
-      - browser
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - browser
     Cline:
       _type: default-block
       consumerGroupKey: cline Profile
       allow:
-      - core
-      - coding
-      - browser
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - browser
     Kilocode:
       _type: default-block
       consumerGroupKey: kilocode Profile
       allow:
-      - core
-      - coding
-      - browser
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - browser
     Goose:
       _type: default-block
       consumerGroupKey: goose Profile
       allow:
-      - core
-      - coding
-      - browser
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - browser
 toolGroups:
-- name: core
-  services:
-    sequential-thinking: '*'
-    memory: '*'
-- name: coding
-  services:
-    context7: '*'
-- name: browser
-  services:
-    kapture: '*'
-    playwright: '*'
-    browser-use: '*'
-- name: home
-  services:
-    hass-mcp: '*'
-- name: creative
-  services:
-    photoshop: '*'
+  - name: core
+    services:
+      sequential-thinking: "*"
+      memory: "*"
+  - name: coding
+    services:
+      context7: "*"
+  - name: knowledge-work
+    services:
+      qdrant-work: "*"
+  - name: knowledge-personal
+    services:
+      qdrant-personal: "*"
+  - name: browser
+    services:
+      kapture: "*"
+      playwright: "*"
+      browser-use: "*"
+  - name: home
+    services:
+      hass-mcp: "*"
+  - name: creative
+    services:
+      photoshop: "*"
 auth:
   enabled: false
 toolExtensions:
