@@ -35,6 +35,11 @@
       "type": "sse",
       "icon": "#E74C3C"
     },
+    "qdrant-code": {
+      "url": "http://host.docker.internal:7020/servers/qdrant-code/sse",
+      "type": "sse",
+      "icon": "#F39C12"
+    },
     "sequential-thinking": {
       "type": "stdio",
       "command": "npx",

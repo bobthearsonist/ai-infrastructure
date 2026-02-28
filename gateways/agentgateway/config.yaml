@@ -42,6 +42,9 @@ binds:
                     - name: qdrant-personal
                       sse:
                         host: http://host.docker.internal:7020/servers/qdrant-personal/sse
+                    - name: qdrant-code
+                      sse:
+                        host: http://host.docker.internal:7020/servers/qdrant-code/sse
                     - name: context7
                       mcp:
                         host: http://host.docker.internal:7008/mcp

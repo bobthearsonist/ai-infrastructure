@@ -257,12 +257,108 @@ Available through agentgateway once configured:
 
 - **Work collection:** 225 points (Profisee Captain's Log, notes, session summaries)
 - **Personal collection:** 3,389 points (daily logs, renovation, finance, fitness, job hunt, etc.)
+- **Code collection:** 7,640 points (10 Git repositories — source code, configs, docs)
 - **Embedding model:** `all-MiniLM-L6-v2` (384d, ~45MB)
+
+## Repository Indexing
+
+Indexes local Git repositories into a `code` collection for semantic search over codebases.
+
+### Collection
+
+| Collection | Content | MCP Server |
+|---|---|---|
+| `code` | Source code, configs, docs from Git repos | `qdrant-code` |
+
+Same pattern as `work`/`personal` — named server in `servers.json`, SSE target in agentgateway, tool group in mcpx.
+
+### Configuration
+
+All repo indexer settings live in `indexer/repos.json` — no code changes needed to add/remove repos or adjust skip patterns.
+
+| Key | Purpose |
+|---|---|
+| `repos_base` | Base directory for repositories (e.g., `~/Repositories`) |
+| `repos` | List of repository directory names to index |
+| `skip_dirs` | Directories to skip (e.g., `.git`, `node_modules`, `dist`) |
+| `skip_files` | Files to skip (e.g., `package-lock.json`, `yarn.lock`) |
+| `skip_extensions` | Binary/generated file extensions to skip |
+| `index_extensions` | Text file extensions to index |
+| `index_filenames` | Specific filenames to always index (e.g., `Dockerfile`, `CLAUDE.md`) |
+| `max_chunk_chars` | Maximum chunk size in characters (default: 1200) |
+
+### Chunking Strategy
+
+Code-aware chunking splits by language-specific boundaries:
+
+| Language | Split Pattern |
+|---|---|
+| Python | `class`, `def`, `async def` |
+| TypeScript/JavaScript | `function`, `class`, `const =`, `interface`, `type` |
+| Go | `func`, `type` |
+| Rust | `fn`, `struct`, `enum`, `impl`, `trait`, `mod` |
+| Ruby | `class`, `module`, `def` |
+| Shell | Function definitions |
+| C#/Java | Class, interface, enum, method declarations |
+| Markdown | H1-H3 header boundaries |
+| Other text | Paragraph-based fallback, then line-based |
+
+### Usage
+
+```bash
+cd indexer
+source .venv/bin/activate
+
+# Incremental index (skips unchanged files)
+python index_repos.py
+
+# Full re-index
+python index_repos.py --force
+
+# Preview without writing
+python index_repos.py --dry-run
+```
+
+### How It Works
+
+1. Loads configuration from `repos.json`
+2. Walks each repository, respecting skip patterns
+3. Skips unchanged files (tracked via `.index_repos_state.json` with MD5 hashes)
+4. Detects language from file extension for code-aware chunking
+5. Prepends `repo/filepath` context to each chunk for better embeddings
+6. Uses `passage_embed` with named vector `fast-all-minilm-l6-v2`
+7. Upserts with deterministic point IDs: `UUID5(repo::filepath::chunk_index)`
+8. Cleans up points for deleted files
+
+### Metadata
+
+Each point stores:
+
+```json
+{
+  "document": "<chunk content>",
+  "metadata": {
+    "repo": "ai-infrastructure",
+    "file_path": "mcps/qdrant-mcp/indexer/index_obsidian.py",
+    "language": "python",
+    "chunk_index": 0,
+    "total_chunks": 5,
+    "collection": "code",
+    "last_modified": "2026-02-27T..."
+  }
+}
+```
+
+### MCP Tools
+
+| Tool | Description |
+|---|---|
+| `qdrant-code_qdrant-find` | Semantic search over indexed repositories |
+| `qdrant-code_qdrant-store` | Store entries in code collection |
 
 ## Future Work
 
 - [ ] Automate re-indexing via launchd/cron schedule
-- [ ] Add code repository indexing (separate `code` collection)
 - [ ] Add AI skills + memory indexing
 - [ ] Migrate Qdrant DB to Synology NAS
 - [ ] Evaluate upgrading to a larger embedding model (nomic-embed-text 768d or mxbai-embed-large 1024d)

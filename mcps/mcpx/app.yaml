@@ -23,6 +23,7 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-personal
+        - knowledge-code
         - browser
     Copilot:
       _type: default-block
@@ -32,6 +33,7 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-personal
+        - knowledge-code
         - browser
     Cline:
       _type: default-block
@@ -41,6 +43,7 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-personal
+        - knowledge-code
         - browser
     Kilocode:
       _type: default-block
@@ -50,6 +53,7 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-personal
+        - knowledge-code
         - browser
     Goose:
       _type: default-block
@@ -59,6 +63,7 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-personal
+        - knowledge-code
         - browser
 toolGroups:
   - name: core
@@ -74,6 +79,9 @@ toolGroups:
   - name: knowledge-personal
     services:
       qdrant-personal: "*"
+  - name: knowledge-code
+    services:
+      qdrant-code: "*"
   - name: browser
     services:
       kapture: "*"

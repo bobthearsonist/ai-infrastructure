@@ -48,6 +48,7 @@ __pycache__/
 
 # Qdrant indexer state
 mcps/qdrant-mcp/indexer/.index_state.json
+mcps/qdrant-mcp/indexer/.index_repos_state.json
 
 # Docker
 *.log
@@ -62,3 +63,6 @@ mcps/qdrant-mcp/indexer/.index_state.json
 
 # MCP memory/knowledge graph data
 mcps/memory/data/
+
+# Session notes (may contain sensitive session data)
+docs/session-thought.md
