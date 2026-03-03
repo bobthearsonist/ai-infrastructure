@@ -143,9 +143,15 @@ Standalone Debian-based container (`python:3.12-slim`) running `mcp-proxy` + `mc
 - **Port:** 7020
 - **Embedding model:** `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
 - **Vector name:** `fast-all-minilm-l6-v2` (set by mcp-server-qdrant's FastEmbed provider)
-- **Named servers:** `qdrant-work` and `qdrant-personal` (configured in `servers.json`)
+- **Named servers:** Configured in `servers.json` (e.g., `qdrant-work`, `qdrant-personal`)
+
+#### Setup
 
 ```bash
+# Copy example config and customize for your machine
+cp servers.json.example servers.json
+# Edit servers.json - remove qdrant-personal if you only need work collection
+
 # Build and start
 docker compose up -d --build
 
@@ -159,16 +165,25 @@ Python script that walks the Obsidian vault, chunks markdown files, generates em
 
 Location: `indexer/index_obsidian.py`
 
-#### Routing Logic
+#### Setup
 
-| Vault Path | Collection |
-|---|---|
-| `0 Profisee/**` | `work` |
-| Everything else | `personal` |
+```bash
+cd indexer
 
-#### Skipped Directories
+# Copy example config and customize for your machine
+cp indexer.yaml.example indexer.yaml
+# Edit indexer.yaml:
+#   - Set vault_path to your Obsidian vault location
+#   - Adjust collections and routing for your needs
+#   - Set skip_unrouted: true for work-only indexing
 
-`.obsidian`, `.trash`, `.history`, `attachments`, `copilot-conversations`, `copilot-custom-prompts`, `Templates`
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# .venv\Scripts\activate   # Windows
+
+pip install -r requirements.txt
+```
 
 #### Usage
 
@@ -176,25 +191,42 @@ Location: `indexer/index_obsidian.py`
 cd indexer
 source .venv/bin/activate
 
+# Index using config file (recommended)
+python index_obsidian.py --config indexer.yaml
+
 # Incremental index (skips unchanged files)
-python index_obsidian.py
+python index_obsidian.py --config indexer.yaml
 
 # Full re-index
-python index_obsidian.py --force
+python index_obsidian.py --config indexer.yaml --force
 
 # Preview without writing
-python index_obsidian.py --dry-run
+python index_obsidian.py --config indexer.yaml --dry-run
 ```
+
+#### Configuration (indexer.yaml)
+
+See `indexer.yaml.example` for all options. Key settings:
+
+| Setting | Description |
+|---|---|
+| `vault_path` | Path to Obsidian vault (machine-specific) |
+| `collections` | List of Qdrant collections to use |
+| `routing` | Maps folder patterns to collections |
+| `skip_unrouted` | `true` = skip unmatched files, `false` = use default_collection |
+| `skip_dirs` | Folders to ignore entirely |
 
 #### How It Works
 
-1. Walks `~/SynologyDrive/Test/` for `.md` files
-2. Skips excluded directories and unchanged files (tracked via `.index_state.json`)
-3. Chunks by markdown headers (H1-H3), falls back to paragraph splitting, max ~800 chars
-4. Prepends document title to each chunk for better embedding context
-5. Uses `passage_embed` (not `embed` or `query_embed`) to match MCP server behavior
-6. Upserts with named vector `fast-all-minilm-l6-v2` and metadata payload
-7. Cleans up points for deleted files
+1. Reads config from `indexer.yaml` (or command-line `--config`)
+2. Walks vault for `.md` files, skipping excluded directories
+3. Routes files to collections based on `routing` rules
+4. Skips unchanged files (tracked via `.index_state.json`)
+5. Chunks by markdown headers (H1-H3), falls back to paragraph splitting, max ~800 chars
+6. Prepends document title to each chunk for better embedding context
+7. Uses `passage_embed` (not `embed` or `query_embed`) to match MCP server behavior
+8. Upserts with named vector `fast-all-minilm-l6-v2` and metadata payload
+9. Cleans up points for deleted files
 
 #### First-Time Setup
 
@@ -203,7 +235,9 @@ cd indexer
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python index_obsidian.py
+cp indexer.yaml.example indexer.yaml
+# Edit indexer.yaml with your vault path and preferences
+python index_obsidian.py --config indexer.yaml
 ```
 
 ## Gateway Configuration
@@ -362,3 +396,34 @@ Each point stores:
 - [ ] Add AI skills + memory indexing
 - [ ] Migrate Qdrant DB to Synology NAS
 - [ ] Evaluate upgrading to a larger embedding model (nomic-embed-text 768d or mxbai-embed-large 1024d)
+
+## Direct Client Access (No Gateway)
+
+On machines without agentgateway, AI clients can connect directly to the qdrant-mcp SSE endpoints.
+
+### Claude Desktop (`claude_desktop_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "qdrant-work": {
+      "url": "http://localhost:7020/servers/qdrant-work/sse"
+    }
+  }
+}
+```
+
+### OpenCode (`opencode.json`)
+
+```json
+{
+  "mcpServers": {
+    "qdrant-work": {
+      "type": "sse",
+      "url": "http://localhost:7020/servers/qdrant-work/sse"
+    }
+  }
+}
+```
+
+This exposes the `qdrant-find` and `qdrant-store` tools directly (prefixed as `qdrant-work_qdrant-find`, etc.).

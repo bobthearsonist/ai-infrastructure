@@ -46,9 +46,13 @@ __pycache__/
 .mypy_cache/
 .venv/
 
-# Qdrant indexer state
+# Qdrant MCP configs (machine-specific)
+mcps/qdrant-mcp/servers.json
+mcps/qdrant-mcp/indexer/indexer.yaml
+mcps/qdrant-mcp/indexer/repos.yaml
 mcps/qdrant-mcp/indexer/.index_state.json
 mcps/qdrant-mcp/indexer/.index_repos_state.json
+!*.example
 
 # Docker
 *.log

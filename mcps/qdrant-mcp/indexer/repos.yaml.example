@@ -1,0 +1,169 @@
+# Repo indexer configuration
+# Copy to repos.yaml and customize for your machine
+# Comment out repos to disable them
+
+repos_base: /repos
+
+repos:
+  # Add repos that are checked out on this machine
+  # - my-project
+  # - another-repo
+
+skip_dirs:
+  - .git
+  - node_modules
+  - dist
+  - build
+  - .venv
+  - venv
+  - __pycache__
+  - .mypy_cache
+  - .pytest_cache
+  - .tox
+  - .eggs
+  - .next
+  - .nuxt
+  - coverage
+  - .nyc_output
+  - target
+  - bin
+  - obj
+  - .vs
+  - .idea
+  - .vscode
+  - packages
+  - TestResults
+
+skip_files:
+  - package-lock.json
+  - yarn.lock
+  - pnpm-lock.yaml
+  - Pipfile.lock
+  - poetry.lock
+  - Cargo.lock
+  - .DS_Store
+  - Thumbs.db
+
+skip_extensions:
+  - .png
+  - .jpg
+  - .jpeg
+  - .gif
+  - .bmp
+  - .ico
+  - .svg
+  - .webp
+  - .mp3
+  - .mp4
+  - .wav
+  - .avi
+  - .mov
+  - .mkv
+  - .zip
+  - .tar
+  - .gz
+  - .bz2
+  - .7z
+  - .rar
+  - .pdf
+  - .doc
+  - .docx
+  - .xls
+  - .xlsx
+  - .ppt
+  - .pptx
+  - .exe
+  - .dll
+  - .so
+  - .dylib
+  - .o
+  - .a
+  - .pyc
+  - .pyo
+  - .class
+  - .wasm
+  - .min.js
+  - .min.css
+  - .map
+  - .ttf
+  - .woff
+  - .woff2
+  - .eot
+  - .otf
+  - .db
+  - .sqlite
+  - .sqlite3
+  - .pickle
+  - .pkl
+  - .nupkg
+  - .snupkg
+
+index_extensions:
+  - .py
+  - .ts
+  - .tsx
+  - .js
+  - .jsx
+  - .go
+  - .rs
+  - .rb
+  - .java
+  - .c
+  - .cpp
+  - .h
+  - .hpp
+  - .cs
+  - .sh
+  - .bash
+  - .zsh
+  - .fish
+  - .ps1
+  - .psm1
+  - .yaml
+  - .yml
+  - .json
+  - .toml
+  - .ini
+  - .cfg
+  - .conf
+  - .md
+  - .txt
+  - .rst
+  - .adoc
+  - .html
+  - .css
+  - .scss
+  - .less
+  - .sql
+  - .dockerfile
+  - .tf
+  - .hcl
+  - .xml
+  - .plist
+  - .csproj
+  - .sln
+  - .props
+  - .lua
+  - .vim
+  - .el
+
+index_filenames:
+  - Dockerfile
+  - Makefile
+  - Rakefile
+  - Gemfile
+  - Vagrantfile
+  - Procfile
+  - Justfile
+  - .gitignore
+  - .dockerignore
+  - .editorconfig
+  - CLAUDE.md
+  - AGENTS.md
+  - README.md
+  - Directory.Build.props
+  - Directory.Packages.props
+  - nuget.config
+  - global.json
+
+max_chunk_chars: 1200

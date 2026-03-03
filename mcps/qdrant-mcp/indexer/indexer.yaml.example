@@ -1,0 +1,62 @@
+# Obsidian Vault Indexer Configuration
+# Copy this file to indexer.yaml and customize for your machine
+# This file is gitignored - each machine maintains its own copy
+
+# =============================================================================
+# NOTE: Vault path is NOT configured here
+# =============================================================================
+# The vault_path is read from ~/ai/local.yaml (obsidian.vault_path) and passed
+# via the VAULT_PATH environment variable. Use run.sh to run the indexer.
+
+# =============================================================================
+# REQUIRED: Qdrant server URL
+# =============================================================================
+# Use http://qdrant:6333 when Qdrant runs in same docker-compose (recommended)
+# Use http://localhost:6333 if running Qdrant separately
+qdrant_url: http://qdrant:6333
+
+# =============================================================================
+# REQUIRED: Collections to create/use
+# =============================================================================
+# Work machine (Windows): only 'work'
+# Home machine (Mac): both 'work' and 'personal'
+collections:
+  - work
+  - personal
+
+# =============================================================================
+# Routing: which folders go to which collection
+# =============================================================================
+routing:
+  work:
+    - "0 Profisee"    # Profisee work notes folder
+
+# =============================================================================
+# Folders to skip entirely (never indexed)
+# =============================================================================
+skip_dirs:
+  - .obsidian
+  - .trash
+  - .history
+  - attachments
+  - copilot-conversations
+  - copilot-custom-prompts
+  - Templates
+
+# =============================================================================
+# Behavior for files not matching any routing rule
+# =============================================================================
+# Work machine: skip_unrouted: true (only index work content)
+# Home machine: skip_unrouted: false (index everything)
+skip_unrouted: false
+default_collection: personal
+
+# =============================================================================
+# Embedding settings (must match qdrant-mcp server config)
+# =============================================================================
+# These defaults are fine - only change if you know what you're doing
+embedding:
+  model: sentence-transformers/all-MiniLM-L6-v2
+  vector_size: 384
+  vector_name: fast-all-minilm-l6-v2
+  max_chunk_chars: 800

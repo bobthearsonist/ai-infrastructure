@@ -1,0 +1,35 @@
+{
+  "_comment": "Copy to servers.json and enable the servers for your machine",
+  "_comment_work": "qdrant-work: Obsidian vault notes (all machines)",
+  "_comment_code": "qdrant-code: Indexed repository code (machines with repos checked out)",
+  "_comment_personal": "qdrant-personal: Personal Obsidian vault (home machine only)",
+  "mcpServers": {
+    "qdrant-work": {
+      "command": "mcp-server-qdrant",
+      "args": [],
+      "env": {
+        "QDRANT_URL": "http://qdrant:6333",
+        "COLLECTION_NAME": "work",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    },
+    "qdrant-code": {
+      "command": "mcp-server-qdrant",
+      "args": [],
+      "env": {
+        "QDRANT_URL": "http://qdrant:6333",
+        "COLLECTION_NAME": "code",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    },
+    "qdrant-personal": {
+      "command": "mcp-server-qdrant",
+      "args": [],
+      "env": {
+        "QDRANT_URL": "http://qdrant:6333",
+        "COLLECTION_NAME": "personal",
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+      }
+    }
+  }
+}

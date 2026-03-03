@@ -1,4 +1,25 @@
 services:
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - '6333:6333'
+      - '6334:6334'
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ['CMD-SHELL', 'timeout 5 bash -c "cat < /dev/null > /dev/tcp/localhost/6333" || exit 1']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - ai-infrastructure
+
   # Qdrant RAG MCP Server - Semantic search via Qdrant + FastEmbed
   # Standalone container (Debian-based) because onnxruntime requires glibc
   qdrant-mcp:
@@ -10,7 +31,7 @@ services:
     ports:
       - '7020:7020'
     volumes:
-      - ./servers.json:/config/servers.json:ro
+      - ${QDRANT_MCP_CONFIG:-./servers.json}:/config/servers.json:ro
       - fastembed-cache:/root/.cache/fastembed
     environment:
       - PYTHONUNBUFFERED=1
@@ -20,10 +41,62 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
+    depends_on:
+      qdrant:
+        condition: service_healthy
     networks:
       - ai-infrastructure
 
+  # Obsidian vault indexer (CPU - fast enough for markdown)
+  obsidian-indexer:
+    build:
+      context: ./indexer
+      target: cpu
+    container_name: obsidian-indexer
+    command: ["python", "index_obsidian.py", "--config", "/app/indexer.yaml"]
+    volumes:
+      - ${VAULT_PATH:-/nonexistent}:/vault:ro
+      - ./indexer/indexer.yaml:/app/indexer.yaml:ro
+      - ./indexer/.index_state.json:/app/.index_state.json
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - ai-infrastructure
+    profiles:
+      - obsidian
+
+  # Repository code indexer (GPU-accelerated embedding)
+  repo-indexer:
+    build:
+      context: ./indexer
+      target: gpu
+    container_name: repo-indexer
+    command: ["python3", "index_repos.py", "--config", "/app/repos.yaml"]
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ${REPOS_BASE:-/nonexistent}:/repos:ro
+      - ./indexer/repos.yaml:/app/repos.yaml:ro
+      - ./indexer/.index_repos_state.json:/app/.index_repos_state.json
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - ai-infrastructure
+    profiles:
+      - repos
+
 volumes:
+  qdrant-data:
   fastembed-cache:
 
 networks:
