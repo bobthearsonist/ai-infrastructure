@@ -1,6 +1,6 @@
 # Qdrant RAG MCP Server
 
-Semantic search over Obsidian vault content via Qdrant vector database, exposed as MCP tools through agentgateway.
+Semantic search over Obsidian vault content and Git repositories via Qdrant vector database, exposed as MCP tools through mcp-proxy SSE endpoints.
 
 ## Architecture
 
@@ -15,8 +15,6 @@ skinparam shadowing false
 skinparam packageStyle frame
 skinparam nodesep 40
 skinparam ranksep 30
-
-' Top-down flow (layered architecture)
 
 ' -- Color palette --
 skinparam package {
@@ -35,6 +33,8 @@ skinparam rectangle {
   BorderColor<<work>> #1565C0
   BackgroundColor<<personal>> #C8E6C9
   BorderColor<<personal>> #2E7D32
+  BackgroundColor<<code>> #FFF9C4
+  BorderColor<<code>> #F9A825
 }
 
 skinparam storage {
@@ -42,15 +42,19 @@ skinparam storage {
   BorderColor<<work>> #1565C0
   BackgroundColor<<personal>> #C8E6C9
   BorderColor<<personal>> #2E7D32
+  BackgroundColor<<code>> #FFF9C4
+  BorderColor<<code>> #F9A825
 }
 
 ' ══════════════════════════════════════
-' LAYER 1: DATA SOURCE
+' LAYER 1: DATA SOURCES
 ' ══════════════════════════════════════
-package "Obsidian Vault  ~/SynologyDrive/Test/" <<source>> {
-  rectangle "0 Profisee/" <<work>> as profisee
-  rectangle "Daily Logs, House, Fitness, Job Hunt ..." <<personal>> as personal_files
+package "Data Sources" <<source>> {
+  rectangle "Obsidian: 0 Profisee/" <<work>> as profisee
+  rectangle "Obsidian: Personal folders" <<personal>> as personal_files
+  rectangle "Git Repositories" <<code>> as repos
   profisee -[hidden]right- personal_files
+  personal_files -[hidden]right- repos
 }
 
 ' ══════════════════════════════════════
@@ -58,66 +62,70 @@ package "Obsidian Vault  ~/SynologyDrive/Test/" <<source>> {
 ' ══════════════════════════════════════
 package "Indexing + Storage" <<indexing>> {
   component "**index_obsidian.py**\nchunking + FastEmbed\nall-MiniLM-L6-v2 (384d)" as indexer
-  storage "work  225 pts" <<work>> as work_col
-  storage "personal  3,290 pts" <<personal>> as personal_col
-  indexer -[hidden]right- work_col
-  work_col -[hidden]right- personal_col
+  component "**index_repos.py**\ncode-aware chunking" as repo_indexer
+  storage "work" <<work>> as work_col
+  storage "personal" <<personal>> as personal_col
+  storage "code" <<code>> as code_col
+  indexer -[hidden]right- repo_indexer
 }
 
 ' ══════════════════════════════════════
 ' LAYER 3: MCP INFRASTRUCTURE
 ' ══════════════════════════════════════
-package "MCP Infrastructure (Docker)" <<infra>> {
+package "qdrant-mcp container :7020" <<infra>> {
+  component "**mcp-proxy**\nSSE multiplexer" as proxy
   rectangle "qdrant-work" <<work>> as work_sse
   rectangle "qdrant-personal" <<personal>> as personal_sse
-  rectangle "**agentgateway**\n:3847" as agw
-  work_sse -[hidden]right- personal_sse
-  personal_sse -[hidden]right- agw
-  note as mcp_note
-    **qdrant-mcp** :7020
-    mcp-proxy + mcp-server-qdrant
-  end note
+  rectangle "qdrant-code" <<code>> as code_sse
+  proxy -[hidden]down- work_sse
 }
 
 ' ══════════════════════════════════════
 ' LAYER 4: AI CLIENTS
 ' ══════════════════════════════════════
 package "AI Clients" <<clients>> {
-  actor "Claude Code" as claude
-  actor "Copilot" as copilot
+  actor "VS Code\nCopilot" as copilot
+  actor "Claude\nDesktop" as claude_desktop
+  actor "Claude\nCode" as claude_code
   actor "OpenCode" as opencode
-  actor "Cline" as cline
-  claude -[hidden]right- copilot
-  copilot -[hidden]right- opencode
+  actor "Cline /\nKilo Code" as cline
+  copilot -[hidden]right- claude_desktop
+  claude_desktop -[hidden]right- claude_code
+  claude_code -[hidden]right- opencode
   opencode -[hidden]right- cline
 }
 
 ' ══════════════════════════════════════
-' CONNECTIONS (top-down between layers)
+' CONNECTIONS
 ' ══════════════════════════════════════
 
-' Layer 1 → Layer 2: Indexing flow
+' Layer 1 → Layer 2
 profisee -[#1565C0]down-> indexer
 personal_files -[#2E7D32]down-> indexer
+repos -[#F9A825]down-> repo_indexer
+
+' Indexers → Storage
 indexer -[#1565C0]down-> work_col
 indexer -[#2E7D32]down-> personal_col
+repo_indexer -[#F9A825]down-> code_col
 
-' Layer 2 → Layer 3: Query flow
+' Layer 2 → Layer 3
 work_col -[#1565C0]down-> work_sse
 personal_col -[#2E7D32]down-> personal_sse
-work_sse -[#1565C0]down-> agw
-personal_sse -[#2E7D32]down-> agw
+code_col -[#F9A825]down-> code_sse
 
-' Layer 3 → Layer 4: Client access
-agw -[#546E7A]down-> claude
-agw -[#546E7A]down-> copilot
-agw -[#546E7A]down-> opencode
-agw -[#546E7A]down-> cline
+' Layer 3 → Layer 4: Direct SSE access
+proxy -[#546E7A]down-> copilot
+proxy -[#546E7A]down-> claude_desktop
+proxy -[#546E7A]down-> claude_code
+proxy -[#546E7A]down-> opencode
+proxy -[#546E7A]down-> cline
 
 legend bottom right
   |<#BBDEFB> Work (Profisee) |
   |<#C8E6C9> Personal |
-  | Access controlled per-client via agentgateway |
+  |<#FFF9C4> Code (Git repos) |
+  | Clients connect directly via SSE |
 end legend
 
 @enduml
@@ -240,45 +248,105 @@ cp indexer.yaml.example indexer.yaml
 python index_obsidian.py --config indexer.yaml
 ```
 
-## Gateway Configuration
+## Client Configuration
 
-### agentgateway (`config.yaml`)
+AI clients connect directly to the qdrant-mcp SSE endpoints on port 7020. Each named server has its own endpoint: `http://localhost:7020/servers/{name}/sse`
 
-```yaml
-- name: qdrant-work
-  sse:
-    host: http://host.docker.internal:7020/servers/qdrant-work/sse
-- name: qdrant-personal
-  sse:
-    host: http://host.docker.internal:7020/servers/qdrant-personal/sse
+### VS Code / GitHub Copilot (`mcp.json`)
+
+```json
+{
+  "servers": {
+    "qdrant-work": {
+      "command": "npx",
+      "args": ["--prefer-online", "-y", "mcp-remote", "http://localhost:7020/servers/qdrant-work/sse"]
+    },
+    "qdrant-code": {
+      "command": "npx",
+      "args": ["--prefer-online", "-y", "mcp-remote", "http://localhost:7020/servers/qdrant-code/sse"]
+    }
+  }
+}
 ```
 
-### mcpx (`mcp.json`)
+Config location: `%APPDATA%\Code\User\mcp.json` (Windows) or `~/Library/Application Support/Code/User/mcp.json` (macOS)
 
-Two server entries pointing at each named server SSE endpoint on port 7020.
+### Claude Desktop (`claude_desktop_config.json`)
 
-### mcpx (`app.yaml`)
-
-```yaml
-toolGroups:
-  - name: knowledge-work
-    services:
-      qdrant-work: "*"
-  - name: knowledge-personal
-    services:
-      qdrant-personal: "*"
+```json
+{
+  "mcpServers": {
+    "qdrant-work": {
+      "command": "npx.cmd",
+      "args": ["-y", "mcp-remote", "http://localhost:7020/servers/qdrant-work/sse"]
+    }
+  }
+}
 ```
 
-Consumers opt into `knowledge-work` and/or `knowledge-personal` in their `allow` list.
+Uses `npx.cmd` on Windows (not `npx`). Config location: `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+
+### Claude Code (`settings.local.json`)
+
+Claude Code discovers MCP servers from `~/.claude/.mcp.json` or project-level `.mcp.json`. Enable them in `~/.claude/settings.local.json`:
+
+```json
+{
+  "enabledMcpjsonServers": ["qdrant-work", "qdrant-code"]
+}
+```
+
+### OpenCode (`opencode.json`)
+
+OpenCode supports SSE natively — no `mcp-remote` bridge needed:
+
+```json
+{
+  "mcpServers": {
+    "qdrant-work": {
+      "type": "remote",
+      "url": "http://localhost:7020/servers/qdrant-work/sse",
+      "enabled": true
+    }
+  }
+}
+```
+
+Config location: `.config/opencode/opencode.json` (user-level) or `opencode.json` (project-level).
+
+### Cline / Kilo Code (`mcp_settings.json`)
+
+```json
+{
+  "mcpServers": {
+    "qdrant-work": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:7020/servers/qdrant-work/sse"]
+    }
+  }
+}
+```
+
+Config locations:
+- **Cline (VS Code):** `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json`
+- **Cline (Standalone):** `~/.cline/data/settings/cline_mcp_settings.json`
+- **Kilo Code:** `%APPDATA%\Code\User\globalStorage\kilocode.kilo-code\settings\mcp_settings.json`
 
 ### Permissions
 
-- `permissions.yaml`: `qdrant_*` added to agentgateway auto_approve
-- `~/.claude/settings.json`: `mcp__agentgateway__qdrant-work_*` and `mcp__agentgateway__qdrant-personal_*` in allow list
+Add qdrant tools to auto-approve in `~/ai/permissions/permissions.yaml`:
+
+```yaml
+auto_approve:
+  - qdrant-work_qdrant-find
+  - qdrant-work_qdrant-store
+  - qdrant-code_qdrant-find
+  - qdrant-code_qdrant-store
+```
 
 ## MCP Tools
 
-Available through agentgateway once configured:
+Available once a client is configured to connect to the qdrant-mcp SSE endpoints:
 
 | Tool | Description |
 |---|---|
@@ -304,7 +372,7 @@ Indexes local Git repositories into a `code` collection for semantic search over
 |---|---|---|
 | `code` | Source code, configs, docs from Git repos | `qdrant-code` |
 
-Same pattern as `work`/`personal` — named server in `servers.json`, SSE target in agentgateway, tool group in mcpx.
+Same pattern as `work`/`personal` — named server in `servers.json`, SSE endpoint on port 7020.
 
 ### Configuration
 
@@ -397,33 +465,4 @@ Each point stores:
 - [ ] Migrate Qdrant DB to Synology NAS
 - [ ] Evaluate upgrading to a larger embedding model (nomic-embed-text 768d or mxbai-embed-large 1024d)
 
-## Direct Client Access (No Gateway)
 
-On machines without agentgateway, AI clients can connect directly to the qdrant-mcp SSE endpoints.
-
-### Claude Desktop (`claude_desktop_config.json`)
-
-```json
-{
-  "mcpServers": {
-    "qdrant-work": {
-      "url": "http://localhost:7020/servers/qdrant-work/sse"
-    }
-  }
-}
-```
-
-### OpenCode (`opencode.json`)
-
-```json
-{
-  "mcpServers": {
-    "qdrant-work": {
-      "type": "sse",
-      "url": "http://localhost:7020/servers/qdrant-work/sse"
-    }
-  }
-}
-```
-
-This exposes the `qdrant-find` and `qdrant-store` tools directly (prefixed as `qdrant-work_qdrant-find`, etc.).

@@ -2,89 +2,105 @@
 
 Configuration for connecting AI clients to the MCP infrastructure.
 
-## Setup
+## MCP Config File Locations
 
-Create symlinks from this directory to your actual client config files:
+Where each client stores its MCP server configuration.
 
-```bash
-# VS Code Copilot
-ln -s ~/Library/Application\ Support/Code/User/mcp.json copilot/vscode-user.json
+| Client | Windows | macOS |
+|--------|---------|-------|
+| VS Code / Copilot | `%APPDATA%\Code\User\mcp.json` | `~/Library/Application Support/Code/User/mcp.json` |
+| VS Code Insiders | `%APPDATA%\Code - Insiders\User\mcp.json` | `~/Library/Application Support/Code - Insiders/User/mcp.json` |
+| Claude Desktop | `%APPDATA%\Claude\claude_desktop_config.json` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Code | `~/.claude/.mcp.json` + `~/.claude/settings.local.json` | same |
+| OpenCode | `~/.config/opencode/opencode.json` or project `opencode.json` | same |
+| Cline (VS Code) | `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json` | `~/Library/Application Support/Code/User/globalStorage/...` |
+| Cline (Standalone) | `~/.cline/data/settings/cline_mcp_settings.json` | same |
+| Kilo Code | `%APPDATA%\Code\User\globalStorage\kilocode.kilo-code\settings\mcp_settings.json` | `~/Library/Application Support/Code/User/globalStorage/...` |
+| Goose | `~/.config/goose/config.yaml` | same |
 
-# IntelliJ Copilot
-ln -s ~/.config/github-copilot/intellij/mcp.json copilot/intellij.mcp
+## Connection Patterns
 
-# Claude Desktop
-ln -s ~/Library/Application\ Support/Claude/claude_desktop_config.json claude/claude_desktop_config.json
+There are two ways clients connect to MCP servers:
 
-# Claude Code
-ln -s ~/.claude.json claude/claude_code_config.json
-ln -s ~/.claude claude/.claude
+### 1. Via gateway (centralized)
 
-# Claude Code User Instructions, Agents, and Skills
-ln -s ~/Repositories/ai/AGENTS.md ~/.claude/claude.md
-ln -s ~/Repositories/ai/agents ~/.claude/agents
-ln -s ~/Repositories/ai/skills ~/.claude/skills
+All MCPs behind a single endpoint with auth, RBAC, and metrics. Either [agentgateway](../gateways/agentgateway/readme.md) or [mcpx](../mcps/mcpx/) can serve as the gateway.
 
-# Cline
-ln -s ~/Library/Application\ Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json cline/mcp_settings.json
+**Endpoint:** `http://localhost:3847/mcp` (or `https://localhost:3443/mcp` for TLS)
 
-# Kilo Code (fork of Cline)
-ln -s ~/Library/Application\ Support/Code/User/globalStorage/kilocode.kilo-code/settings/mcp_settings.json kilocode/mcp_settings.json
-
-# Goose
-ln -s ~/.config/goose/config.yaml goose/config.yaml
-```
-
-## Connection Details
-
-**Endpoint:** `http://localhost:3847/mcp` (or `https://localhost:3443/mcp` for SSL)
-
-All clients use `mcp-remote` to bridge stdio→HTTP:
+Clients use `mcp-remote` to bridge stdio to HTTP:
 
 ```json
-"command": "/bin/bash",
-"args": [
-  "-c",
-  "source ~/.nvm/nvm.sh && nvm use 20.11.1 >/dev/null 2>&1 && npx mcp-remote@latest http://localhost:3847/mcp --header 'x-client-id: your-client-name'"
-]
+{
+  "command": "npx",
+  "args": ["--prefer-online", "-y", "mcp-remote", "http://localhost:3847/mcp", "--header", "x-client-id: your-client-name"]
+}
+```
+
+> **Note:** Claude Desktop on Windows requires `npx.cmd` instead of `npx`.
+
+### 2. Direct SSE (per-MCP)
+
+Clients connect directly to individual MCP SSE endpoints. Used for MCPs that expose their own SSE server (e.g., qdrant-mcp on `:7020`).
+
+```json
+{
+  "command": "npx",
+  "args": ["--prefer-online", "-y", "mcp-remote", "http://localhost:7020/servers/qdrant-work/sse"]
+}
+```
+
+OpenCode supports SSE natively without `mcp-remote`:
+
+```json
+{
+  "type": "remote",
+  "url": "http://localhost:7020/servers/qdrant-work/sse",
+  "enabled": true
+}
 ```
 
 ### Client Identification
 
-Each client should include an `x-client-id` header for tracking in metrics and traces:
+When using agentgateway, include an `x-client-id` header for tracking:
 
-| Client          | Header Value                  |
-| --------------- | ----------------------------- |
+| Client | Header Value |
+|--------|-------------|
 | VS Code Copilot | `x-client-id: vscode-copilot` |
-| Claude Desktop  | `x-client-id: claude-desktop` |
-| Cline           | `x-client-id: cline`          |
-| Kilo Code       | `x-client-id: kilocode`       |
-| Goose           | `x-client-id: goose`          |
+| Claude Desktop | `x-client-id: claude-desktop` |
+| OpenCode | `x-client-id: opencode` |
+| Cline | `x-client-id: cline` |
+| Kilo Code | `x-client-id: kilocode` |
+| Goose | `x-client-id: goose` |
 
-### Why nvm?
+## Symlinks
 
-`mcp-remote` requires Node.js 20+. Since system Node versions vary, we use nvm to guarantee the correct version. The `>/dev/null 2>&1` suppresses nvm output that would interfere with the MCP protocol.
+Symlink client config files into this directory for version control. Use `ln -s` (macOS/Linux) or `mklink` (Windows, elevated).
 
-## Claude Code User Instructions, Agents, and Skills
+| Source (actual config) | Target (this repo) |
+|------------------------|--------------------|
+| `{APPDATA}/Code/User/mcp.json` | `copilot/vscode-user.json` |
+| `{APPDATA}/Claude/claude_desktop_config.json` | `claude/claude_desktop_config.json` |
+| `{APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` | `cline/mcp_settings.json` |
+| `{APPDATA}/Code/User/globalStorage/kilocode.kilo-code/settings/mcp_settings.json` | `kilocode/mcp_settings.json` |
+| `~/.config/goose/config.yaml` | `goose/config.yaml` |
 
-Claude Code reads several user-level configuration paths:
+`{APPDATA}` = `%APPDATA%` on Windows, `~/Library/Application Support` on macOS.
 
-| Path | Purpose |
-| ---- | ------- |
-| `~/.claude/claude.md` | Global instructions for all sessions |
-| `~/.claude/agents/` | Custom agent definitions |
-| `~/.claude/skills/` | Personal skills (slash commands) available across all projects |
+## User Instructions, Agents, and Skills
 
-All are symlinked to the centralized ai repository:
+Shared across Claude Code, OpenCode, and GitHub Copilot via symlinks from a centralized ai repository:
 
-```bash
-~/.claude/claude.md → ~/Repositories/ai/AGENTS.md
-~/.claude/agents    → ~/Repositories/ai/agents
-~/.claude/skills    → ~/Repositories/ai/skills
-```
+| Source (canonical) | Target | Used by |
+|--------------------|--------|---------|
+| `~/ai/AGENTS.md` | `~/.claude/CLAUDE.md` | Claude Code |
+| `~/ai/agents/` | `~/.claude/agents/` | Claude Code |
+| `~/ai/skills/` | `~/.claude/skills/` | Claude Code, OpenCode |
+| `~/ai/skills/` | `~/.copilot/skills/` | GitHub Copilot |
+| `~/ai/agents/opencode/` | `~/.config/opencode/agent/` | OpenCode |
 
 This allows:
 
-- **Single source of truth** for instructions, agents, and skills across all Claude Code sessions
+- **Single source of truth** for instructions, agents, and skills across all sessions
 - **Version controlled** configuration via the ai repository
 - **Shared patterns** for memory, todo management, sequential thinking, and skill promotion

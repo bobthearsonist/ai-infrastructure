@@ -44,6 +44,7 @@ package "SSE MCPs" as sse_mcps #FFF3E0 {
   [playwright\n:7007] as playwright #FFCC80
   [browser-use\n:7011] as browser_use #FFCC80
   [hass-mcp\n:7010] as hass_mcp #FFCC80
+  [qdrant-mcp\n:7020] as qdrant_mcp #FFCC80
 }
 
 ' === Platform Services ===
@@ -76,6 +77,7 @@ agentgateway --> context7 : SSE
 agentgateway --> playwright : SSE
 agentgateway --> browser_use : SSE
 agentgateway --> hass_mcp : SSE
+agentgateway --> qdrant_mcp : SSE
 agentgateway --> langfuse_mcp : MCP
 
 ' stdio-proxy to stdio MCPs
@@ -122,8 +124,9 @@ endlegend
 | playwright | ✅ Running | 15+ |
 | browser-use | ✅ Running | 10+ |
 | hass-mcp | ✅ Running | 5+ |
+| qdrant-mcp | ✅ Running | 6 |
 | langfuse | ✅ Available | - |
-| **Total** | | **56+ tools** |
+| **Total** | | **62+ tools** |
 
 ## Network Architecture
 
@@ -148,6 +151,7 @@ rectangle "DOCKER (ai-infrastructure network)" as docker {
   rectangle ":15001 Admin UI" as admin #C8E6C9
   rectangle ":3443/:9223 nginx" as nginx #A5D6A7
   rectangle ":7030/:61822 stdio-proxy" as stdio #FFCC80
+  rectangle ":7020 qdrant-mcp" as qdrant #FFCC80
   rectangle ":3000 Grafana" as grafana #81D4FA
   rectangle ":9090 Prometheus" as prom #81D4FA
   rectangle ":16686 Jaeger" as jaeger #81D4FA
@@ -196,6 +200,7 @@ ai-infrastructure/
 │   ├── mcpx/          # MCPX gateway (alternative)
 │   ├── memory/        # Memory/knowledge graph
 │   ├── playwright/    # Playwright browser automation
+│   ├── qdrant-mcp/    # Qdrant semantic search (mcp-proxy + mcp-server-qdrant)
 │   ├── sequential-thinking/ # Chain of thought reasoning
 │   └── stdio-proxy/   # stdio→SSE bridge
 ├── platform/          # Platform services
@@ -221,6 +226,7 @@ ai-infrastructure/
 | [stdio-proxy](mcps/stdio-proxy/readme.md) | stdio→SSE bridge (mcp-proxy) | ✅ Running | [→](mcps/stdio-proxy/readme.md) |
 | [kapture](mcps/kapture/readme.md) | Chrome extension MCP | ✅ Running | [→](mcps/kapture/readme.md) |
 | [playwright](mcps/playwright/readme.md) | Browser automation | ✅ Running | [→](mcps/playwright/readme.md) |
+| [qdrant-mcp](mcps/qdrant-mcp/README.md) | Qdrant semantic search (work, code) | ✅ Running | [→](mcps/qdrant-mcp/README.md) |
 | [browser-use](mcps/browser-use/readme.md) | AI browser automation | ✅ Running | [→](mcps/browser-use/readme.md) |
 | [context7](mcps/context7/readme.md) | Context7 library docs | ✅ Running | [→](mcps/context7/readme.md) |
 | [hass-mcp](mcps/hass-mcp/readme.md) | Home Assistant | ✅ Running | [→](mcps/hass-mcp/readme.md) |
@@ -304,6 +310,9 @@ See [clients/](clients/) for configuration examples for each AI client.
 | 9090 | Prometheus | HTTP | Metrics UI & API |
 | 3000 | Grafana | HTTP | Dashboards (admin/admin) |
 | 3100 | Langfuse | HTTP | LLM observability UI |
+| 6333 | Qdrant HTTP API | HTTP | Vector DB REST API |
+| 6334 | Qdrant gRPC API | gRPC | Vector DB gRPC API |
+| 7020 | qdrant-mcp | SSE | Semantic search MCP (mcp-proxy) |
 | 9190 | Langfuse MinIO | HTTP | S3-compatible storage |
 | 4317/4318 | OTel Collector | gRPC/HTTP | Internal only (Docker network) |
 | 8889 | OTel Collector Metrics | Prometheus | Span metrics (internal) |
