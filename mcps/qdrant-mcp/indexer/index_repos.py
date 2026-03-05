@@ -504,8 +504,12 @@ def main():
         else:
             print(f"  (no changes)")
 
-    # Clean up deleted files
-    deleted = set(prev_state.keys()) - current_keys
+    # Clean up deleted files — only from repos in the current config.
+    # Files from repos NOT in the config are preserved so that running
+    # a subset of repos never deletes data from the others.
+    active_repos = set(repos)
+    prev_active = {k for k in prev_state if k.split("::", 1)[0] in active_repos}
+    deleted = prev_active - current_keys
     for del_key in deleted:
         old = prev_state[del_key]
         parts = del_key.split("::", 1)
@@ -518,6 +522,11 @@ def main():
             if old_ids and not args.dry_run:
                 client.delete(collection_name=COLLECTION_NAME, points_selector=old_ids)
         print(f"  DELETED {del_key}")
+
+    # Carry forward state for repos not in current config
+    for key, value in prev_state.items():
+        if key.split("::", 1)[0] not in active_repos:
+            new_state[key] = value
 
     if not args.dry_run:
         save_state(new_state, state_file)
