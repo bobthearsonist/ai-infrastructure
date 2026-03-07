@@ -334,33 +334,23 @@ Config locations:
 
 ### Permissions
 
-Add qdrant tools to auto-approve in `~/ai/permissions/permissions.yaml`:
-
-```yaml
-auto_approve:
-  - qdrant-work_qdrant-find
-  - qdrant-work_qdrant-store
-  - qdrant-code_qdrant-find
-  - qdrant-code_qdrant-store
-```
+Add qdrant tools to auto-approve in `~/ai/permissions/permissions.yaml`. Tool names vary by client — use the `find` and `store` operations for each server.
 
 ## MCP Tools
 
-Available once a client is configured to connect to the qdrant-mcp SSE endpoints:
+Each named server exposes two operations:
 
-| Tool | Description |
+| Operation | Description |
 |---|---|
-| `qdrant-work_qdrant-find` | Semantic search over work (Profisee) content |
-| `qdrant-work_qdrant-store` | Store new entries in work collection |
-| `qdrant-personal_qdrant-find` | Semantic search over personal content |
-| `qdrant-personal_qdrant-store` | Store new entries in personal collection |
+| `qdrant-find` | Semantic search over the collection |
+| `qdrant-store` | Store new entries in the collection |
+
+The full tool name depends on the client (e.g., `qdrant-work_qdrant-find` in Copilot, `mcp__qdrant-work__qdrant-find` in Claude Code). Configure permissions using your client's naming convention.
 
 ## Current State
 
-- **Work collection:** 225 points (Profisee Captain's Log, notes, session summaries)
-- **Personal collection:** 3,389 points (daily logs, renovation, finance, fitness, job hunt, etc.)
-- **Code collection:** 7,640 points (10 Git repositories — source code, configs, docs)
 - **Embedding model:** `all-MiniLM-L6-v2` (384d, ~45MB)
+- Collection point counts vary by machine — query Qdrant directly for current stats
 
 ## Repository Indexing
 
@@ -368,9 +358,9 @@ Indexes local Git repositories into a `code` collection for semantic search over
 
 ### Collection
 
-| Collection | Content | MCP Server |
-|---|---|---|
-| `code` | Source code, configs, docs from Git repos | `qdrant-code` |
+| Collection | Content |
+|---|---|
+| `code` | Source code, configs, docs from Git repos |
 
 Same pattern as `work`/`personal` — named server in `servers.json`, SSE endpoint on port 7020.
 
@@ -453,10 +443,7 @@ Each point stores:
 
 ### MCP Tools
 
-| Tool | Description |
-|---|---|
-| `qdrant-code_qdrant-find` | Semantic search over indexed repositories |
-| `qdrant-code_qdrant-store` | Store entries in code collection |
+Exposes the same `qdrant-find` and `qdrant-store` operations as other collections.
 
 ## Future Work
 
