@@ -4,6 +4,8 @@ services:
   mcp_playwright:
     image: mcr.microsoft.com/playwright/mcp:latest
     container_name: mcp_playwright
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     # The image already sets the entrypoint to the CLI.
     # Just pass flags exactly like your working docker run:
     command: ['--host=0.0.0.0', '--port=7007']

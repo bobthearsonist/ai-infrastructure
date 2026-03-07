@@ -352,6 +352,7 @@ agentgateway → OTel Collector → Jaeger (traces)
 - [ ] Fix obsidian MCP backend - Obsidian semantic plugin (:3001) not running; same issue as langfuse. Need to either auto-start or make the gateway tolerant of missing optional backends.
 - [ ] Evaluate using agentgateway's native TLS instead of nginx-proxy for HTTPS termination
 - [ ] Configure Playwright MCP with CDP proxy (nginx-proxy on 9223 needed for browser-use MCPs to connect to host Chrome)
+- [ ] Recreate remaining containers with Watchtower labels (agentgateway, playwright, qdrant, observability stack) — labels added to compose files but containers need `docker compose up -d --force-recreate` to pick them up
 - [x] Add client identification headers for per-client tracking
 - [x] Set up Jaeger for distributed tracing
 - [x] Configure agentgateway to send traces to OpenTelemetry Collector
