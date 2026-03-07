@@ -35,6 +35,15 @@ permissions:
         - knowledge-personal
         - knowledge-code
         - browser
+    Copilot Insiders:
+      _type: default-block
+      consumerGroupKey: vscode-insiders-copilot Profile
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - knowledge-code
     Cline:
       _type: default-block
       consumerGroupKey: cline Profile
@@ -65,6 +74,24 @@ permissions:
         - knowledge-personal
         - knowledge-code
         - browser
+    vscode-copilot:
+      _type: default-block
+      consumerGroupKey: Visual Studio Code - Insiders (via mcp-remote 0.1.37) Profile
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - knowledge-code
+    vscode-insiders-copilot:
+      _type: default-block
+      consumerGroupKey: Visual Studio Code - Insiders (via mcp-remote 0.1.37) Profile
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-personal
+        - knowledge-code
 toolGroups:
   - name: core
     services:
