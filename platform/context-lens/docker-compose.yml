@@ -1,0 +1,61 @@
+# Context Lens + mitmproxy
+# Intercepts LLM API traffic and visualizes context window composition.
+#
+# Usage:
+#   docker compose up -d
+#   Open http://localhost:4041
+#
+# Ports:
+#   4040 - Context Lens proxy (base URL override for Claude Code, Aider, etc.)
+#   4041 - Context Lens web UI + ingest API
+#   8080 - mitmproxy forward proxy (HTTPS interception for OpenCode, VS Code Copilot, etc.)
+#
+# Data is persisted to ~/.context-lens/data via volume mount.
+
+services:
+  context-lens:
+    image: node:22-slim
+    container_name: context-lens
+    restart: unless-stopped
+    working_dir: /app
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        npm install -g context-lens@latest 2>&1 | tail -1
+        echo "Starting context-lens standalone (proxy + web UI)..."
+        npx context-lens --no-open
+    ports:
+      - "4040:4040"
+      - "4041:4041"
+    volumes:
+      - ${CONTEXT_LENS_DATA:-~/.context-lens/data}:/root/.context-lens/data
+    environment:
+      CONTEXT_LENS_BIND_HOST: "0.0.0.0"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4041').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  mitmproxy:
+    image: mitmproxy/mitmproxy:latest
+    container_name: context-lens-mitmproxy
+    restart: unless-stopped
+    depends_on:
+      context-lens:
+        condition: service_healthy
+    entrypoint: ["mitmdump"]
+    command:
+      - "-s"
+      - "/addon/mitm_addon.py"
+      - "--quiet"
+      - "--listen-port"
+      - "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./mitm_addon.py:/addon/mitm_addon.py:ro
+      - ${MITMPROXY_CERTS:-~/.mitmproxy}:/home/mitmproxy/.mitmproxy
+    environment:
+      CONTEXT_LENS_INGEST_URL: "http://context-lens:4041/api/ingest"

@@ -2,6 +2,10 @@
 
 Central infrastructure for AI tools, MCP servers, gateways, and platform services.
 
+## TODO
+
+- [ ] Create an `ai-infrastructure` skill (in `~/AI/skills/` or in this repo) that documents all services, ports, startup commands, and dependencies so AI agents know what infrastructure is available when setting up machines or debugging connectivity issues.
+
 ## Architecture
 
 ```plantuml
@@ -204,6 +208,7 @@ ai-infrastructure/
 │   ├── sequential-thinking/ # Chain of thought reasoning
 │   └── stdio-proxy/   # stdio→SSE bridge
 ├── platform/          # Platform services
+│   ├── context-lens/  # LLM context window inspector
 │   ├── langfuse/      # LLM observability, prompts, evals
 │   └── observability/ # Prometheus, Grafana, Jaeger
 └── workflows/         # Custom workflow definitions
@@ -237,6 +242,7 @@ ai-infrastructure/
 | ------- | ----------- | ------ | ---- |
 | [Observability](platform/observability/readme.md) | Prometheus, Grafana, Jaeger | ✅ Running | [→](platform/observability/readme.md) |
 | [Langfuse](platform/langfuse/README.md) | LLM observability, prompts, evals | ✅ Available | [→](platform/langfuse/README.md) |
+| [Context Lens](platform/context-lens/README.md) | LLM context window inspector (proxy + web UI) | ✅ Running | [→](platform/context-lens/README.md) |
 
 ### Clients
 
@@ -314,6 +320,8 @@ See [clients/](clients/) for configuration examples for each AI client.
 | 6334 | Qdrant gRPC API | gRPC | Vector DB gRPC API |
 | 7020 | qdrant-mcp | SSE | Semantic search MCP (mcp-proxy) |
 | 9190 | Langfuse MinIO | HTTP | S3-compatible storage |
+| 4040 | Context Lens Proxy | HTTP | LLM API interception proxy |
+| 4041 | Context Lens UI | HTTP | Context composition web UI |
 | 4317/4318 | OTel Collector | gRPC/HTTP | Internal only (Docker network) |
 | 8889 | OTel Collector Metrics | Prometheus | Span metrics (internal) |
 
