@@ -10,7 +10,9 @@
       "env": {
         "QDRANT_URL": "http://qdrant:6333",
         "COLLECTION_NAME": "work",
-        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "TOOL_FIND_DESCRIPTION": "Look up indexed Obsidian vault work notes (Profisee captain's log, project notes, meeting notes). Use when searching for past work context, session summaries, or project documentation.",
+        "TOOL_STORE_DESCRIPTION": "Store new entries in the Obsidian work notes search index. The 'information' parameter should contain the text to index for future RAG searches."
       }
     },
     "qdrant-code": {
@@ -19,7 +21,9 @@
       "env": {
         "QDRANT_URL": "http://qdrant:6333",
         "COLLECTION_NAME": "code",
-        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "TOOL_FIND_DESCRIPTION": "Search indexed source code from Git repositories. Use when looking for code examples, implementations, patterns, or understanding how something is coded in the codebase.",
+        "TOOL_STORE_DESCRIPTION": "Store new entries in the source code search index. The 'information' parameter should contain code or code descriptions to index for future searches."
       }
     },
     "qdrant-personal": {
@@ -28,7 +32,9 @@
       "env": {
         "QDRANT_URL": "http://qdrant:6333",
         "COLLECTION_NAME": "personal",
-        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2"
+        "EMBEDDING_MODEL": "sentence-transformers/all-MiniLM-L6-v2",
+        "TOOL_FIND_DESCRIPTION": "Search indexed personal Obsidian vault content. Use when looking for personal notes, non-work items, or home-related documentation.",
+        "TOOL_STORE_DESCRIPTION": "Store new entries in the personal notes search index. The 'information' parameter should contain personal note text to index for future searches."
       }
     }
   }

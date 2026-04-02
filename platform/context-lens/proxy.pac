@@ -11,7 +11,7 @@
 function FindProxyForURL(url, host) {
     if (dnsDomainIs(host, "githubcopilot.com") ||
         dnsDomainIs(host, "api.anthropic.com")) {
-        return "PROXY localhost:8080";
+        return "PROXY 127.0.0.1:8080";
     }
     return "DIRECT";
 }

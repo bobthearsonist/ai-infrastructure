@@ -62,6 +62,27 @@ CATCHALL_PATH_PATTERNS = [
     ("/chat/completions", "openai"),
 ]
 
+# User-Agent substrings → source name.
+# Checked in order; first match wins.
+USER_AGENT_SOURCE_MAP = [
+    ("opencode", "opencode"),
+    ("aider", "aider"),
+    ("cline", "cline"),
+    ("codex", "codex"),
+    ("copilot", "copilot"),
+    ("cursor", "cursor"),
+]
+
+
+def _detect_source_from_headers(flow: http.HTTPFlow) -> str | None:
+    """Detect the client tool from request headers."""
+    ua = (flow.request.headers.get("user-agent", "")
+          or flow.request.headers.get("User-Agent", "")).lower()
+    for pattern, source in USER_AGENT_SOURCE_MAP:
+        if pattern in ua:
+            return source
+    return None
+
 
 def match_request(flow: http.HTTPFlow):
     """Check if this request matches a known LLM API pattern."""
@@ -69,14 +90,16 @@ def match_request(flow: http.HTTPFlow):
     path = flow.request.path
     for host_pat, path_pat, provider, source in CAPTURE_PATTERNS:
         if host_pat in host and path_pat in path:
-            # CLI-provided tool name overrides per-pattern source so all
-            # traffic in this mitmproxy session is attributed to the same tool.
-            return provider, CONTEXT_LENS_SOURCE or source
+            # Priority: CLI env var > header detection > per-pattern source
+            detected = CONTEXT_LENS_SOURCE or _detect_source_from_headers(flow) or source
+            return provider, detected
     # Fall back to catch-all path matching for OpenAI-compatible providers
     for path_pat, provider in CATCHALL_PATH_PATTERNS:
         if path_pat in path:
-            source = CONTEXT_LENS_SOURCE or (host.split(".")[0] if "." in host else host)
-            return provider, source
+            detected = (CONTEXT_LENS_SOURCE
+                        or _detect_source_from_headers(flow)
+                        or (host.split(".")[0] if "." in host else host))
+            return provider, detected
     return None, None
 
 

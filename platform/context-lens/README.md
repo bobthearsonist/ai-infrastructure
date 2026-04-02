@@ -163,9 +163,28 @@ The `CAPTURE_PATTERNS` list has no entry for `githubcopilot.com`, and `CATCHALL_
 ("/chat/completions", "openai"),
 ```
 
+## Development
+
+Run from local source with hot-reload:
+
+```bash
+# Copy and configure env
+cp .env.dev.example .env
+
+# Edit .env to set CONTEXT_LENS_SRC to your worktree path
+
+# Start dev mode
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+This mounts the source from `CONTEXT_LENS_SRC`, runs `tsc --watch` for backend compilation, `nodemon` for server auto-restart, and Vite dev server for UI hot-reload.
+
+To switch worktrees, update `CONTEXT_LENS_SRC` in `.env` and restart.
+
 ## Ports
 
 | Port | Service | Notes |
 |------|---------|-------|
 | 4040 | Proxy | LLM API interception |
-| 4041 | Web UI | Context composition dashboard |
+| 4041 | Analysis API | Auto-restart in dev mode |
+| 5173 | Vite dev server | UI hot-reload (dev mode only) |
