@@ -7,49 +7,108 @@ Local reverse proxy that intercepts LLM API calls from coding agents and visuali
 - **Web UI**: `http://localhost:4041`
 - **Data**: `~/.context-lens/data/*.lhar`
 
-## Installation
+## Architecture
 
-Installed globally via npm (not Docker — lightweight local tool):
+The Docker Compose stack runs two services:
 
-```bash
-npm install -g context-lens
-```
+- **context-lens** -- the proxy (4040) and web UI (4041), installed from npm at startup.
+- **mitmproxy** -- a forward proxy (8080) that intercepts HTTPS traffic from tools that can't set a custom base URL (VS Code Copilot, Codex, etc.) and forwards captures to the ingest API.
 
-Update:
-
-```bash
-npm update -g context-lens
-```
-
-Context Lens checks for updates on each run and notifies you.
-
-### Dependencies
-
-- **mitmproxy** (for OpenCode, Cline interception): already installed via `pip install --user mitmproxy`
-- Requires `C:\Users\MartinPe\AppData\Roaming\Python\Python314\Scripts` on PATH
-
-## Usage
-
-### Terminal (Claude Code)
+### Quick start
 
 ```bash
-context-lens --no-open claude
-# or with flags
-context-lens --no-open claude --continue
-context-lens --no-open claude --resume
+docker compose up -d
+# Open http://localhost:4041
 ```
 
-> `--no-open` required on Windows Git Bash — `start` command doesn't exist in MSYS2. See [issue #33](https://github.com/larsderidder/context-lens/issues/33).
+### Ports
 
-### Terminal (OpenCode)
+| Port | Service         | Notes                                        |
+| ---- | --------------- | -------------------------------------------- |
+| 4040 | Proxy           | `ANTHROPIC_BASE_URL` override for Claude Code |
+| 4041 | Web UI / API    | Analysis dashboard and ingest endpoint        |
+| 8080 | mitmproxy       | HTTPS forward proxy for Copilot, Codex, etc. |
+
+### Environment (`.env`)
+
+Copy `.env.example` and edit as needed:
 
 ```bash
-context-lens --no-open oc
+cp .env.example .env
 ```
 
-### VS Code Extension
+| Variable              | Default                  | Description                                     |
+| --------------------- | ------------------------ | ----------------------------------------------- |
+| `CONTEXT_LENS_DATA`   | `~/.context-lens/data`   | Host path for session data (mounted into container) |
+| `MITMPROXY_CERTS`     | `~/.mitmproxy`           | Host path to mitmproxy CA certs                 |
 
-The Claude Code VS Code extension is configured to route through Context Lens via environment variable:
+### Stopping
+
+```bash
+docker compose down
+```
+
+## Development (hot-reload from source)
+
+The dev overlay mounts your local context-lens source into the container so changes rebuild and reload automatically.
+
+### Prerequisites
+
+- A local clone or worktree of the [context-lens repo](https://github.com/larsderidder/context-lens)
+- Docker and Docker Compose
+
+### Setup
+
+```bash
+# Copy the dev env template
+cp .env.dev.example .env
+
+# Edit .env — set CONTEXT_LENS_SRC to your source checkout
+# CONTEXT_LENS_SRC=/c/Repositories/context-lens
+```
+
+### Start dev mode
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+This runs three processes inside the container via `concurrently`:
+
+| Process   | What it does                           |
+| --------- | -------------------------------------- |
+| `tsc`     | TypeScript watch compiler              |
+| `nodemon` | Auto-restarts the server on `dist/` changes |
+| `vite`    | UI dev server with hot-reload          |
+
+### Dev ports
+
+| Port | Service         | Notes                            |
+| ---- | --------------- | -------------------------------- |
+| 4040 | Proxy           | LLM API interception             |
+| 4041 | Analysis API    | Auto-restart on backend changes  |
+| 5173 | Vite dev server | UI hot-reload (dev mode only)    |
+
+In dev mode, open `http://localhost:5173` for the UI (Vite serves it with HMR). The API on 4041 still works but the UI there won't hot-reload.
+
+### Switching worktrees
+
+Update `CONTEXT_LENS_SRC` in `.env` to point at a different worktree, then restart:
+
+```bash
+# .env
+CONTEXT_LENS_SRC=/c/Repositories/context-lens.worktrees/feat/show-session-label
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+## Client Configuration
+
+### Claude Code (terminal and VS Code extension)
+
+Point Claude Code at the built-in proxy:
 
 ```jsonc
 // VS Code settings.json
@@ -58,50 +117,35 @@ The Claude Code VS Code extension is configured to route through Context Lens vi
 }
 ```
 
-Start the proxy in background mode before using VS Code:
+> If Context Lens is not running, Claude Code will fail to connect to the API. Remove or comment out the env var when not using the proxy.
 
-```bash
-context-lens background start --no-open
+### VS Code Copilot, Codex, and other HTTPS-only tools
+
+These tools can't set a custom base URL, so they go through mitmproxy on port 8080 instead.
+
+**Option A: PAC file** -- a `proxy.pac` is included that routes `githubcopilot.com` and `api.anthropic.com` through mitmproxy:
+
+```jsonc
+// VS Code settings.json
+"http.proxyAutoconfigUrl": "file:///C:/Users/YourName/.context-lens/proxy.pac",
+"http.proxyStrictSSL": false
 ```
 
-Stop when done:
+**Option B: Environment variable**
 
 ```bash
-context-lens background stop
+https_proxy=http://localhost:8080 SSL_CERT_FILE=~/.mitmproxy/mitmproxy-ca-cert.pem codex "prompt"
 ```
 
-> If Context Lens is not running, Claude Code in VS Code will fail to connect to the API. Remove or comment out the env var setting when not using the proxy.
+## Windows Setup
 
-### Background Mode
+### mitmproxy CA certificate
 
-Keep the proxy running across terminal sessions:
+mitmproxy needs a trusted CA cert to intercept HTTPS. On first run it generates certs in `~/.mitmproxy/`. Install the root CA into the OS trust store:
 
 ```bash
-context-lens background start --no-open   # start detached
-context-lens background status             # check if running
-context-lens background stop               # stop
+certutil -addstore Root "%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.cer"
 ```
-
-## Analyze Captures
-
-```bash
-# Human-readable summary
-context-lens analyze ~/.context-lens/data/claude-<id>.lhar
-
-# JSON output for scripting
-context-lens analyze ~/.context-lens/data/claude-<id>.lhar --json
-
-# Composition before compaction events
-context-lens analyze <file>.lhar --composition=pre-compaction
-```
-
-## Diagnostics
-
-```bash
-context-lens doctor
-```
-
-Checks: node version, port availability, mitmdump presence, CA cert, data directory.
 
 ## What It Shows
 
@@ -113,78 +157,3 @@ The web UI at `localhost:4041` provides:
 - **Findings** that flag issues (large tool results, context overflow risk, unused definitions)
 - **Timeline** showing context growth over turns
 
-## Known Limitations
-
-- Findings panel is informational only — no drill-down to specific tool calls
-- No per-tool/provider aggregation (all tool_results lumped together)
-- `start` command fails on Windows Git Bash ([#33](https://github.com/larsderidder/context-lens/issues/33))
-
-## Windows Bugs (local patches required)
-
-Two bugs prevent `context-lens oc` from working on Windows with the GitHub Copilot provider. Both patched locally in `C:\nvm4w\nodejs\node_modules\context-lens\` — patches are lost on `npm update -g context-lens`, reapply after updating.
-
-### 1. ENOENT when spawning npm-installed tools
-
-**File**: `dist/cli.js` (~line 461)
-
-`spawn(commandName, ...)` is called without `shell: true`. On Windows, npm-installed tools like `opencode` and `codex` only have `.cmd`/`.sh` shims — no `.exe`. Node's `spawn` without shell mode can't resolve `.cmd` extensions, causing `ENOENT`.
-
-**Fix**: Add `shell: true` on Windows:
-
-```js
-// Before (broken on Windows):
-childProcess = spawn(spawnCommand, spawnArgs, {
-    stdio: "inherit",
-    env: childEnv,
-});
-
-// After:
-const isWindows = process.platform === "win32";
-childProcess = spawn(spawnCommand, spawnArgs, {
-    stdio: "inherit",
-    env: childEnv,
-    shell: isWindows,
-});
-```
-
-### 2. GitHub Copilot API traffic not captured by mitmproxy addon
-
-**File**: `mitm_addon.py`
-
-The `CAPTURE_PATTERNS` list has no entry for `githubcopilot.com`, and `CATCHALL_PATH_PATTERNS` only matches `/v1/chat/completions` — but GitHub Copilot's API uses `/chat/completions` (no `/v1/` prefix). Traffic passes through mitmproxy but is silently dropped.
-
-**Fix**: Add GitHub Copilot to `CAPTURE_PATTERNS` and a catchall for `/chat/completions`:
-
-```python
-# Add to CAPTURE_PATTERNS (before the OpenAI entries):
-("githubcopilot.com", "/chat/completions", "openai", None),
-
-# Add to CATCHALL_PATH_PATTERNS:
-("/chat/completions", "openai"),
-```
-
-## Development
-
-Run from local source with hot-reload:
-
-```bash
-# Copy and configure env
-cp .env.dev.example .env
-
-# Edit .env to set CONTEXT_LENS_SRC to your worktree path
-
-# Start dev mode
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-```
-
-This mounts the source from `CONTEXT_LENS_SRC`, runs `tsc --watch` for backend compilation, `nodemon` for server auto-restart, and Vite dev server for UI hot-reload.
-
-To switch worktrees, update `CONTEXT_LENS_SRC` in `.env` and restart.
-
-## Ports
-
-| Port | Service | Notes |
-|------|---------|-------|
-| 4040 | Proxy | LLM API interception |
-| 4041 | Analysis API | Auto-restart in dev mode |
-| 5173 | Vite dev server | UI hot-reload (dev mode only) |
