@@ -367,6 +367,77 @@ agentgateway → OTel Collector → Jaeger (traces)
 - [x] Create Grafana dashboard for metrics visualization
 - [x] Set up Langfuse for LLM observability and prompt management
 
+## Workflows
+
+### Fork Contribution: Cherry-Pick Staged Changes
+
+Used for contributing to upstream open-source projects (e.g., Context Lens). Maintains a local `main` with all in-flight fixes applied while each fix lives on its own branch as a separate PR to upstream.
+
+```
+upstream/main ← PRs from your fork branches
+    ↑
+origin/main (your fork, tracks upstream)
+    ↑
+local main (staged cherry-picks from all active branches)
+    ↑
+┌───┴───┬──────────┬──────────┐
+fix/a   fix/b   feat/c   fix/d    ← worktree branches, each = 1 PR
+```
+
+**Key invariant**: Local `main` is never committed ahead of `origin/main`. All local-only changes live as **staged but uncommitted** cherry-picks.
+
+**Develop** on worktree branches (each branch = one PR):
+
+```bash
+git worktree add ../repo-fix-foo fix/foo
+cd ../repo-fix-foo
+# ... make changes, commit, push ...
+git push origin fix/foo   # open PR against upstream/main
+```
+
+**Stack** changes on local main:
+
+```bash
+git checkout main
+git cherry-pick --no-commit origin/main..<branch-name>
+# Repeat for each active branch — all fixes are now applied but uncommitted
+```
+
+**Sync** with upstream (chain: upstream → origin/main → branches):
+
+```bash
+git stash push -m "staged cherry-picks"
+git checkout main && git fetch --all
+git rebase upstream/main
+git push origin main                    # --force-with-lease if rebased
+
+# Rebase active branches onto synced main
+git rebase main fix/still-open-a
+git push --force-with-lease origin fix/still-open-a
+
+# Rebuild staged state from remaining open branches
+git checkout main
+git cherry-pick --no-commit origin/main..fix/still-open-a
+git stash drop
+```
+
+**Switch machines** — clone fork, fetch, cherry-pick open branches:
+
+```bash
+git clone <fork-url> && cd repo
+git remote add upstream <upstream-url>
+git fetch --all && git rebase upstream/main
+git cherry-pick --no-commit origin/main..origin/fix/branch-a
+git cherry-pick --no-commit origin/main..origin/fix/branch-b
+```
+
+**Tips**:
+- `git branch --no-merged origin/main` — list branches that still need cherry-picking
+- `git diff --cached --stat` — see your current cherry-pick stack
+- `git restore --staged .` — abort and rebuild if staged state gets messy
+
+See [Context Lens workflow details](../AI/docs/context-lens-cherry-pick-workflow.md) for project-specific branch status and machine resume recipes.
+
 ## Resources
 
 - [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro)
