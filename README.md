@@ -436,7 +436,7 @@ git cherry-pick --no-commit origin/main..origin/fix/branch-b
 - `git diff --cached --stat` — see your current cherry-pick stack
 - `git restore --staged .` — abort and rebuild if staged state gets messy
 
-See [Context Lens workflow details](../AI/docs/context-lens-cherry-pick-workflow.md) for project-specific branch status and machine resume recipes.
+See [Context Lens workflow details](docs/context-lens-cherry-pick-workflow.md) for project-specific branch status and machine resume recipes.
 
 ## Resources
 
