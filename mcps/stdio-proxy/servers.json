@@ -3,20 +3,6 @@
     "sequential-thinking": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
-    },
-    "kapture": {
-      "command": "npx",
-      "args": ["-y", "kapture-mcp", "bridge"],
-      "env": {
-        "KAPTURE_BRIDGE_PORT": "61822"
-      }
-    },
-    "photoshop": {
-      "command": "uvx",
-      "args": ["--find-links", "/local-pypi", "psmcp"],
-      "env": {
-        "PROXY_URL": "ws://adb-proxy:3001"
-      }
     }
   }
 }

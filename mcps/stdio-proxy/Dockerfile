@@ -14,8 +14,7 @@ RUN apk add --no-cache python3 py3-pip curl bash && \
 # Install Azure CLI for azure-devops MCP (azcli auth mode)
 RUN uv tool install azure-cli
 
-# Copy server configuration
-COPY servers.json /config/servers.json
+# servers.json must be provided via volume mount (per-machine config)
 
 # Expose the proxy port
 EXPOSE 7030
