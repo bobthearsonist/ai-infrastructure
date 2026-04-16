@@ -11,11 +11,11 @@
         "KAPTURE_BRIDGE_PORT": "61822"
       }
     },
-    "azure-devops": {
-      "command": "npx",
-      "args": ["-y", "@azure-devops/mcp", "-a", "azcli", "profisee"],
+    "photoshop": {
+      "command": "uvx",
+      "args": ["--find-links", "/local-pypi", "psmcp"],
       "env": {
-        "AZURE_CONFIG_DIR": "/root/.azure"
+        "PROXY_URL": "ws://adb-proxy:3001"
       }
     }
   }
