@@ -1,3 +1,6 @@
+include:
+  - path: ../../mcps/stdio-proxy/docker-compose.yml
+
 services:
   # MCPX Gateway - MCP Proxy Server
   # https://docs.lunar.dev/mcpx/architecture
@@ -16,6 +19,7 @@ services:
       - "3100:3000" # Metrics port (remapped from 3000 - conflict with other service)
     volumes:
       - ./:/lunar/packages/mcpx-server/config
+      - ${MCP_CONFIG}:/lunar/packages/mcpx-server/config/mcp.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

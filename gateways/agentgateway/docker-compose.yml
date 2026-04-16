@@ -23,10 +23,6 @@ services:
       - "host.docker.internal:host-gateway"
     dns:
       - 127.0.0.11  # Docker embedded DNS
-    # Wait for stdio-proxy to be fully ready (warmed up) before starting
-    depends_on:
-      stdio-proxy:
-        condition: service_healthy
     networks:
       - ai-infrastructure
 

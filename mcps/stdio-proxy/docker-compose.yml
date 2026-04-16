@@ -1,17 +1,17 @@
 services:
+  # Stateless stdio MCP proxy - included per-stack via compose include:
+  # Referenced by container name (stdio_proxy) on the shared network
   stdio-proxy:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: stdio-proxy
     restart: unless-stopped
-    ports:
-      - "7030:7030"
-      - "61822:61822"  # Kapture WebSocket bridge
+    expose:
+      - "7030"
+      - "61822"  # Kapture WebSocket bridge
     volumes:
       - ./servers.json:/config/servers.json:ro
-      # Mount data directories from individual MCP folders
-      - ../memory/data:/data/memory
+      - ${AZURE_DIR}:/root/.azure:ro
       # Local Python packages (build with: python -m build --outdir ~/.local-pypi)
       - ~/.local-pypi:/local-pypi:ro
     environment:

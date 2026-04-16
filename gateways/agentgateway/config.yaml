@@ -24,30 +24,26 @@ binds:
                   targets:
                     - name: sequential-thinking
                       sse:
-                        host: http://host.docker.internal:7030/servers/sequential-thinking/sse
+                        host: http://stdio-proxy:7030/servers/sequential-thinking/sse
                     - name: memory
                       sse:
-                        host: http://host.docker.internal:7030/servers/memory/sse
+                        host: http://memory_mcp:7040/servers/memory/sse
                     - name: kapture
                       sse:
-                        host: http://host.docker.internal:7030/servers/kapture/sse
-                    # Photoshop MCP (via stdio-proxy)
-                    - name: photoshop
-                      sse:
-                        host: http://host.docker.internal:7030/servers/photoshop/sse
+                        host: http://stdio-proxy:7030/servers/kapture/sse
                     # Qdrant RAG (standalone container - multi-collection)
                     - name: qdrant-work
                       sse:
-                        host: http://host.docker.internal:7020/servers/qdrant-work/sse
+                        host: http://qdrant-mcp:7020/servers/qdrant-work/sse
                     - name: qdrant-personal
                       sse:
-                        host: http://host.docker.internal:7020/servers/qdrant-personal/sse
+                        host: http://qdrant-mcp:7020/servers/qdrant-personal/sse
                     - name: qdrant-code
                       sse:
-                        host: http://host.docker.internal:7020/servers/qdrant-code/sse
+                        host: http://qdrant-mcp:7020/servers/qdrant-code/sse
                     - name: context7
                       mcp:
-                        host: http://host.docker.internal:7008/mcp
+                        host: http://context7_mcp:7008/mcp
                     - name: playwright
                       sse:
                         host: http://host.docker.internal:7007/sse
@@ -57,6 +53,9 @@ binds:
                     - name: hass-mcp
                       sse:
                         host: http://host.docker.internal:7010/sse
+                    - name: azure-devops
+                      sse:
+                        host: http://stdio-proxy:7030/servers/azure-devops/sse
                     # TODO: Fix langfuse-prompts - needs langfuse stack running on :3101
                     # - name: langfuse-prompts
                     #   mcp:

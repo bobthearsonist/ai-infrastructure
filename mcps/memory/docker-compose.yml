@@ -1,0 +1,25 @@
+services:
+  # Memory MCP Server - Dedicated stateful container
+  # Single shared instance across all gateway stacks (avoids concurrent-write race)
+  memory-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: memory_mcp
+    restart: unless-stopped
+    volumes:
+      - ./servers.json:/config/servers.json:ro
+      - ${MEMORY_DIR}:/data/memory
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7040/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - ai-infrastructure
+
+networks:
+  ai-infrastructure:
+    name: mcpx_ai-infrastructure
+    external: true

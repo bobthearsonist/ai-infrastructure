@@ -4,13 +4,6 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
     },
-    "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {
-        "MEMORY_FILE_PATH": "/data/memory/memory.json"
-      }
-    },
     "kapture": {
       "command": "npx",
       "args": ["-y", "kapture-mcp", "bridge"],
@@ -18,11 +11,11 @@
         "KAPTURE_BRIDGE_PORT": "61822"
       }
     },
-    "photoshop": {
-      "command": "uvx",
-      "args": ["--find-links", "/local-pypi", "psmcp"],
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "-a", "azcli", "profisee"],
       "env": {
-        "PROXY_URL": "ws://adb-proxy:3001"
+        "AZURE_CONFIG_DIR": "/root/.azure"
       }
     }
   }

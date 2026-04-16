@@ -7,10 +7,17 @@ Persistent memory storage for conversations and context.
 - Package: `@modelcontextprotocol/server-memory`
 - Repository: https://github.com/modelcontextprotocol/servers
 
-## Transport
+## Architecture
 
-Stdio → SSE via stdio-proxy container
+**Dedicated stateful container** — runs as a single shared instance across all gateway stacks
+to avoid concurrent-write race conditions on `memory.jsonl`.
 
-## Data
+- Transport: stdio → SSE via `mcp-proxy` wrapper
+- Port: `7040`
+- SSE endpoint: `/servers/memory/sse`
+- Data: `/data/memory/memory.jsonl` (bind-mounted from host)
 
-Memory is persisted to `data/memory.json`
+## Usage
+
+Both gateway stacks (mcpx, agentgateway) reference this container by its name
+`memory_mcp` on the shared `mcpx_ai-infrastructure` Docker network.

@@ -46,6 +46,9 @@ __pycache__/
 .mypy_cache/
 .venv/
 
+# Machine-specific MCP configs
+*.windows-work.json
+
 # Qdrant MCP configs (machine-specific)
 mcps/qdrant-mcp/servers.json
 mcps/qdrant-mcp/indexer/indexer.yaml

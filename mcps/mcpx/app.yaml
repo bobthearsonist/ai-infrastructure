@@ -1,97 +1,104 @@
 permissions:
   default:
     _type: default-block
-    allow: []
+    allow:
+      - core
+      - coding
+      - knowledge-work
+      - knowledge-code
+      - devops
+      - diagrams
   consumers:
-    Claude Desktop:
+    claude-code:
       _type: default-block
-      consumerGroupKey: claude-ai (via mcp-remote 0.1.30) Profile
-      allow:
-        - core
-        - browser
-    VSCode:
-      _type: default-block
-      consumerGroupKey: Visual Studio Code (via mcp-remote 0.1.31) Profile
-      allow:
-        - core
-        - browser
-    OpenCode:
-      _type: default-block
-      consumerGroupKey: opencode Profile
+      consumerGroupKey: claude-code
       allow:
         - core
         - coding
         - knowledge-work
-        - knowledge-personal
         - knowledge-code
-        - browser
-    Copilot:
+        - devops
+        - diagrams
+    claude-desktop:
       _type: default-block
-      consumerGroupKey: vscode-copilot Profile
+      consumerGroupKey: claude-desktop
       allow:
         - core
         - coding
         - knowledge-work
-        - knowledge-personal
         - knowledge-code
-        - browser
-    Copilot Insiders:
-      _type: default-block
-      consumerGroupKey: vscode-insiders-copilot Profile
-      allow:
-        - core
-        - coding
-        - knowledge-work
-        - knowledge-personal
-        - knowledge-code
-    Cline:
-      _type: default-block
-      consumerGroupKey: cline Profile
-      allow:
-        - core
-        - coding
-        - knowledge-work
-        - knowledge-personal
-        - knowledge-code
-        - browser
-    Kilocode:
-      _type: default-block
-      consumerGroupKey: kilocode Profile
-      allow:
-        - core
-        - coding
-        - knowledge-work
-        - knowledge-personal
-        - knowledge-code
-        - browser
-    Goose:
-      _type: default-block
-      consumerGroupKey: goose Profile
-      allow:
-        - core
-        - coding
-        - knowledge-work
-        - knowledge-personal
-        - knowledge-code
-        - browser
+        - devops
+        - diagrams
     vscode-copilot:
       _type: default-block
-      consumerGroupKey: Visual Studio Code - Insiders (via mcp-remote 0.1.37) Profile
+      consumerGroupKey: vscode-copilot
       allow:
         - core
         - coding
         - knowledge-work
-        - knowledge-personal
         - knowledge-code
+        - devops
+        - diagrams
     vscode-insiders-copilot:
       _type: default-block
-      consumerGroupKey: Visual Studio Code - Insiders (via mcp-remote 0.1.37) Profile
+      consumerGroupKey: vscode-insiders-copilot
       allow:
         - core
         - coding
         - knowledge-work
-        - knowledge-personal
         - knowledge-code
+        - devops
+        - diagrams
+    opencode:
+      _type: default-block
+      consumerGroupKey: opencode
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-code
+        - devops
+        - diagrams
+    cline:
+      _type: default-block
+      consumerGroupKey: cline
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-code
+        - devops
+        - diagrams
+    cline-standalone:
+      _type: default-block
+      consumerGroupKey: cline-standalone
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-code
+        - devops
+        - diagrams
+    kilocode:
+      _type: default-block
+      consumerGroupKey: kilocode
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-code
+        - devops
+        - diagrams
+    goose:
+      _type: default-block
+      consumerGroupKey: goose
+      allow:
+        - core
+        - coding
+        - knowledge-work
+        - knowledge-code
+        - devops
+        - diagrams
 toolGroups:
   - name: core
     services:
@@ -103,27 +110,25 @@ toolGroups:
   - name: knowledge-work
     services:
       qdrant-work: "*"
-  - name: knowledge-personal
-    services:
-      qdrant-personal: "*"
   - name: knowledge-code
     services:
       qdrant-code: "*"
-  - name: browser
+  - name: devops
     services:
-      kapture: "*"
-      playwright: "*"
-      browser-use: "*"
-  - name: home
+      azure-devops: "*"
+  - name: diagrams
     services:
-      hass-mcp: "*"
-  - name: creative
-    services:
-      photoshop: "*"
+      mermaid: "*"
 auth:
   enabled: false
 toolExtensions:
   services: {}
 targetServerAttributes:
   context7:
+    inactive: false
+  sequential-thinking:
+    inactive: false
+  memory:
+    inactive: false
+  azure-devops:
     inactive: false
