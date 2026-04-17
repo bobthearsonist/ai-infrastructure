@@ -1,7 +1,7 @@
 # Dev overlay — mounts local source for hot-reload development.
 #
 # Usage:
-#   CONTEXT_LENS_SRC=/c/Repositories/context-lens docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   CONTEXT_LENS_SRC=/c/Repositories/context-lens docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d context-lense
 #
 # Or create a .env file:
 #   CONTEXT_LENS_SRC=/c/Repositories/context-lens
@@ -9,7 +9,7 @@
 # Ports:
 #   4040 - Proxy
 #   4041 - Analysis API
-#   5173 - Vite dev server (UI hot-reload)
+#   5175 - Vite dev server (UI hot-reload, remapped from 5173)
 
 services:
   context-lens:
@@ -19,10 +19,10 @@ services:
       - /app/ui/node_modules
       - ${CONTEXT_LENS_DATA:-~/.context-lens/data}:/root/.context-lens/data
     ports:
-      - "5173:5173"
+      - "5175:5173"
     environment:
       CONTEXT_LENS_BIND_HOST: "0.0.0.0"
-      TSC_WATCHFILE: UseFsEventsWithFallbackDynamicPolling
+      CONTEXT_LENS_MAX_SESSIONS: "${CONTEXT_LENS_MAX_SESSIONS:-1000}"
     command:
       - |
         apt-get update && apt-get install -y --no-install-recommends procps git && rm -rf /var/lib/apt/lists/*
