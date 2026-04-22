@@ -16,7 +16,7 @@ services:
         'run',
         '-i',
         '--rm',
-        '--network=mcpx_ai-infrastructure',
+        '--network=ai-shared',
         '--name=browser-use-mcp',
         '--label=com.docker.compose.project=browser-use',
         '--label=com.docker.compose.service=browser-use-mcp',
@@ -56,5 +56,5 @@ services:
 
 networks:
   ai-infrastructure:
-    name: mcpx_ai-infrastructure
+    name: ai-shared
     external: true

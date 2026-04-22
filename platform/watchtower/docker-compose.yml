@@ -22,5 +22,5 @@ services:
 
 networks:
   default:
-    name: mcpx_ai-infrastructure
+    name: ai-shared
     external: true

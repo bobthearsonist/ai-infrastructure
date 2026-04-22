@@ -24,7 +24,8 @@ services:
     dns:
       - 127.0.0.11  # Docker embedded DNS
     networks:
-      - ai-infrastructure
+      - default        # Private network for stdio-proxy
+      - ai-shared      # Shared network for other MCP services
 
   # Debug sidecar for troubleshooting network connectivity
   debug:
@@ -36,7 +37,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - ai-infrastructure
+      - default
+      - ai-shared
     command: ["sleep", "infinity"]
 
   # NGINX SSL/WebSocket Proxy
@@ -57,9 +59,12 @@ services:
     depends_on:
       - agentgateway
     networks:
-      - ai-infrastructure
+      - default        # Can reach agentgateway on private network
 
 networks:
-  ai-infrastructure:
-    name: mcpx_ai-infrastructure
+  default:
+    # Private network for stdio-proxy (included service)
+    # Each stack gets its own default network to prevent DNS collisions
+  ai-shared:
+    name: ai-shared
     external: true

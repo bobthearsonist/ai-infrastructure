@@ -36,13 +36,13 @@ agentgateway is an open-source MCP gateway/proxy from the Linux Foundation. It s
 
 ### Prerequisites
 
-1. Create the shared Docker network:
+1. Create the shared Docker network (optional - mcpx creates it automatically):
 
    ```bash
-   docker network create mcpx_ai-infrastructure
+   docker network create ai-shared
    ```
 
-2. Start stdio-proxy (required for sequential-thinking and memory):
+2. Start mcpx or ensure the ai-shared network exists (stdio-proxy runs within each gateway stack):
 
    ```bash
    cd ../../mcps/stdio-proxy

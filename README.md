@@ -256,16 +256,18 @@ See [clients/readme.md](clients/readme.md) for configuration.
 
 ## Quick Start
 
-### 1. Create Docker network
+### 1. Create shared Docker network
 
 ```bash
-docker network create mcpx_ai-infrastructure
+docker network create ai-shared
 ```
 
-### 2. Start stdio-proxy (for stdio-based MCPs)
+**Note**: The `ai-shared` network is created by the mcpx stack automatically. This step is only needed if you start other services before mcpx.
+
+### 2. Start mcpx gateway (creates ai-shared network)
 
 ```bash
-cd mcps/stdio-proxy
+cd mcps/mcpx
 docker-compose up -d
 ```
 

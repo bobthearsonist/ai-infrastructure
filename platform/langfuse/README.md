@@ -147,7 +147,7 @@ LANGFUSE_INIT_USER_PASSWORD=your-secure-password
 
 ## Integration with AI Infrastructure
 
-Langfuse is connected to the `mcpx_ai-infrastructure` Docker network, allowing other services to send traces.
+Langfuse is connected to the `ai-shared` Docker network, allowing other services to send traces.
 
 ### Getting API Keys
 

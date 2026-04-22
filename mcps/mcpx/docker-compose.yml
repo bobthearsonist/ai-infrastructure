@@ -22,6 +22,9 @@ services:
       - ${MCP_CONFIG}:/lunar/packages/mcpx-server/config/mcp.json:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      stdio-proxy:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173/"]
       interval: 30s
@@ -29,7 +32,8 @@ services:
       retries: 3
       start_period: 15s
     networks:
-      - ai-infrastructure
+      - default        # Private network for stdio-proxy
+      - ai-shared      # Shared network for other MCP services
 
   # Lunar Proxy - API Gateway (optional, for rate limiting / observability)
   lunar-proxy:
@@ -49,7 +53,7 @@ services:
       - LUNAR_MANAGED=false
       - LUNAR_TELEMETRY=true
     networks:
-      - ai-infrastructure
+      - ai-shared
 
   # NGINX SSL Proxy
   nginx-ssl:
@@ -72,8 +76,11 @@ services:
       mcpx:
         condition: service_healthy
     networks:
-      - ai-infrastructure
+      - default        # Can reach mcpx on private network
 
 networks:
-  ai-infrastructure:
-    driver: bridge
+  default:
+    # Private network for stdio-proxy (included service)
+    # Each stack gets its own default network to prevent DNS collisions
+  ai-shared:
+    external: true

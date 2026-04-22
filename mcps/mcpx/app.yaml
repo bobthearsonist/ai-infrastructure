@@ -11,14 +11,14 @@ permissions:
   consumers:
     claude-code:
       _type: default-block
-      consumerGroupKey: claude-code
+      consumerGroupKey: claude-code (via mcp-remote 0.1.21) Profile
       allow:
         - core
         - coding
         - knowledge-work
         - knowledge-code
-        - devops
         - diagrams
+        - devops
     claude-desktop:
       _type: default-block
       consumerGroupKey: claude-desktop
@@ -131,4 +131,6 @@ targetServerAttributes:
   memory:
     inactive: false
   azure-devops:
+    inactive: false
+  mermaid:
     inactive: false

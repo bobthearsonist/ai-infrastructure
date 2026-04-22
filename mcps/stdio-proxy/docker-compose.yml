@@ -24,13 +24,10 @@ services:
       timeout: 5s
       retries: 10
       start_period: 90s  # Allow time for npx + uv to download packages on first run
-    networks:
-      - ai-infrastructure
 
 # NOTE: adb-proxy runs separately from mcps/adb-mcp/docker-compose.yml
 # Start it with: cd ../adb-mcp && docker-compose up -d adb-proxy
-
-networks:
-  ai-infrastructure:
-    name: mcpx_ai-infrastructure
-    external: true
+# 
+# Network: When included by a parent compose file, this service will join
+# the parent's default network (private to that stack). This prevents DNS
+# collisions when multiple stacks include stdio-proxy.

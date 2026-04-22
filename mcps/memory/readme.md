@@ -20,4 +20,4 @@ to avoid concurrent-write race conditions on `memory.jsonl`.
 ## Usage
 
 Both gateway stacks (mcpx, agentgateway) reference this container by its name
-`memory_mcp` on the shared `mcpx_ai-infrastructure` Docker network.
+`memory_mcp` on the shared `ai-shared` Docker network.

@@ -229,7 +229,7 @@ networks:
   langfuse-internal:
     name: langfuse-internal
   ai-infrastructure:
-    name: mcpx_ai-infrastructure
+    name: ai-shared
     external: true
 
 # ============================================
