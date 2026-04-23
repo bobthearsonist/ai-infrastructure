@@ -25,6 +25,39 @@ services:
       retries: 10
       start_period: 90s  # Allow time for npx + uv to download packages on first run
 
+  # Lightweight status logger - polls MCP proxy /status endpoint every 30s
+  # Provides real-time health visibility via logs (docker compose logs -f mcp-status)
+  mcp-status:
+    image: alpine:latest
+    restart: unless-stopped
+    depends_on:
+      stdio-proxy:
+        condition: service_healthy
+    volumes:
+      - ${SERVERS_CONFIG:-./servers.json}:/config/servers.json:ro
+    command: >
+      sh -c '
+      apk add --no-cache -q jq >/dev/null 2>&1;
+      while true; do
+        response=$$(wget -qO- --timeout=5 http://stdio-proxy:7030/status 2>/dev/null);
+        if [ -z "$$response" ]; then
+          echo "[mcp-status] ⚠️  proxy unreachable";
+        else
+          status="[mcp-status]";
+          for name in $$(echo "$$response" | jq -r ".server_instances | keys[]"); do
+            state=$$(echo "$$response" | jq -r ".server_instances[\"$$name\"]");
+            if [ "$$state" = "configured" ]; then
+              status="$$status ✅ $$name";
+            else
+              status="$$status ❌ $$name ($$state)";
+            fi;
+          done;
+          echo "$$status";
+        fi;
+        sleep 30;
+      done
+      '
+
 # NOTE: adb-proxy runs separately from mcps/adb-mcp/docker-compose.yml
 # Start it with: cd ../adb-mcp && docker-compose up -d adb-proxy
 # 
