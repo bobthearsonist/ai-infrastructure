@@ -46,8 +46,10 @@ __pycache__/
 .mypy_cache/
 .venv/
 
-# Machine-specific MCP configs
-*.windows-work.json
+# Machine-specific MCP configs (servers.home.json, servers.windows-work.json, etc.)
+mcps/stdio-proxy/servers.*.json
+!mcps/stdio-proxy/servers.json
+!mcps/stdio-proxy/servers.example.json
 
 # Qdrant MCP configs (machine-specific)
 mcps/qdrant-mcp/servers.json
