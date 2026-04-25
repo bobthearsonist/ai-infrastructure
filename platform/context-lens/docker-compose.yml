@@ -53,6 +53,12 @@ services:
       - "--quiet"
       - "--listen-port"
       - "8080"
+      # Docker-mapped connections appear from the bridge IP, not loopback.
+      # mitmproxy 12+ blocks "global" client IPs by default, which kills all
+      # proxied traffic from the host. Disable that since this container is
+      # only reachable via the host's :8080 port mapping anyway.
+      - "--set"
+      - "block_global=false"
     ports:
       - "8080:8080"
     volumes:
