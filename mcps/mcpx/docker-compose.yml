@@ -20,6 +20,9 @@ services:
     volumes:
       - ./:/lunar/packages/mcpx-server/config
       - ${MCP_CONFIG}:/lunar/packages/mcpx-server/config/mcp.json:ro
+      - ${CUSTOM_CA_CERT:-/dev/null}:/usr/local/share/ca-certificates/custom-ca.pem:ro
+    environment:
+      - NODE_EXTRA_CA_CERTS=${CUSTOM_CA_CERT:+/usr/local/share/ca-certificates/custom-ca.pem}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
