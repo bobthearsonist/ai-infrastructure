@@ -1,3 +1,5 @@
+name: context7
+
 services:
   # Context7 MCP Server - Up-to-date Code Documentation
   context7-mcp:

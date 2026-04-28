@@ -1,3 +1,5 @@
+name: mcpx
+
 include:
   - path: ../../mcps/stdio-proxy/docker-compose.yml
 

@@ -1,3 +1,5 @@
+name: context-lens
+
 # Context Lens + mitmproxy
 # Intercepts LLM API traffic and visualizes context window composition.
 #

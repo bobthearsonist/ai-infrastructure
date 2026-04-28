@@ -1,3 +1,5 @@
+name: watchtower
+
 services:
   # Watchtower - Automatic Docker image updates
   # https://containrrr.dev/watchtower/

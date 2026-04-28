@@ -1,3 +1,5 @@
+name: browser-use
+
 services:
   browser_use_proxy:
     build:

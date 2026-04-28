@@ -1,3 +1,5 @@
+name: agentgateway
+
 include:
   - path: ../../mcps/stdio-proxy/docker-compose.yml
 

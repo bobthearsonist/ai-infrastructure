@@ -1,3 +1,5 @@
+name: adb-mcp
+
 services:
   # WebSocket proxy for Adobe UXP plugin communication
   # Photoshop MCP runs inside stdio-proxy, connects here via Docker network

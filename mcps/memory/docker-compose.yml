@@ -1,3 +1,5 @@
+name: memory
+
 services:
   # Memory MCP Server - Dedicated stateful container
   # Single shared instance across all gateway stacks (avoids concurrent-write race)

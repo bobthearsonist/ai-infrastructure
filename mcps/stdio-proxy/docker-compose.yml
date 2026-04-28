@@ -1,3 +1,5 @@
+name: stdio-proxy
+
 services:
   # Stateless stdio MCP proxy - included per-stack via compose include:
   # Referenced by container name (stdio_proxy) on the shared network

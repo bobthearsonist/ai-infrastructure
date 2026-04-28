@@ -1,3 +1,5 @@
+name: reverse-proxy
+
 services:
   reverse-proxy:
     image: nginx:alpine

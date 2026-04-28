@@ -1,3 +1,5 @@
+name: hass-mcp
+
 services:
   hass_mcp_proxy:
     build:

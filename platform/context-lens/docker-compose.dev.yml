@@ -1,3 +1,5 @@
+name: context-lens
+
 # Dev overlay — mounts local source for hot-reload development.
 #
 # Usage:

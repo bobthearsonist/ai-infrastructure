@@ -1,3 +1,5 @@
+name: qdrant-mcp
+
 services:
   # Qdrant Vector Database
   qdrant:

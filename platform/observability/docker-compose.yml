@@ -1,3 +1,5 @@
+name: observability
+
 services:
   # OpenTelemetry Collector - Trace processing and span metrics
   otel-collector:
