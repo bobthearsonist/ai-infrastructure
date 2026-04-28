@@ -27,6 +27,16 @@ SERVERS_CONFIG=./servers.windows-work.json
 
 If `SERVERS_CONFIG` is not set, defaults to `./servers.json` (baseline).
 
+## Machine-Specific Volumes
+
+Host directories (credentials, local packages) vary per machine. These are configured via `docker-compose.override.yml`, which Docker Compose auto-merges when present.
+
+1. Copy the example: `cp docker-compose.override.yml.example docker-compose.override.yml`
+2. Uncomment/add the volume mounts your machine needs
+3. The override file is gitignored — each machine maintains its own
+
+See `docker-compose.override.yml.example` for common mounts.
+
 ## Endpoints
 
 Each MCP server is exposed at `/servers/{name}/sse` on port 7030.

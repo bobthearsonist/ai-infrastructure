@@ -48,6 +48,7 @@ __pycache__/
 
 # Machine-specific MCP configs (servers.home.json, servers.windows-work.json, etc.)
 mcps/stdio-proxy/servers.*.json
+mcps/stdio-proxy/docker-compose.override.yml
 !mcps/stdio-proxy/servers.json
 !mcps/stdio-proxy/servers.example.json
 mcps/mcpx/mcp.*.json

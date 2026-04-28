@@ -1,0 +1,13 @@
+# Machine-specific volume overrides for stdio-proxy
+# Copy to docker-compose.override.yml and customize for your machine.
+# Docker Compose auto-merges this file when present.
+#
+# Common mounts:
+#   Azure CLI credentials (for azure-devops MCP): ~/.azure:/root/.azure:ro
+#   Local Python packages: ~/.local-pypi:/local-pypi:ro
+services:
+  stdio-proxy:
+    volumes:
+      - ${SERVERS_CONFIG:-./servers.json}:/config/servers.json:ro
+      # - ~/.azure:/root/.azure:ro
+      # - ~/.local-pypi:/local-pypi:ro

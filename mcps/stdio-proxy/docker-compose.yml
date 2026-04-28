@@ -13,9 +13,6 @@ services:
       - "61822"  # Kapture WebSocket bridge
     volumes:
       - ${SERVERS_CONFIG:-./servers.json}:/config/servers.json:ro
-      - ${AZURE_DIR}:/root/.azure
-      # Local Python packages (build with: python -m build --outdir ~/.local-pypi)
-      - ~/.local-pypi:/local-pypi:ro
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
