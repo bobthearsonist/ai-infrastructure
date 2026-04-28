@@ -4,6 +4,19 @@ include:
   - path: ../../mcps/stdio-proxy/docker-compose.yml
 
 services:
+  # Extend the included stdio-proxy to also reach ai-shared services
+  # (e.g. kapture-server). The private `default` network stays primary so
+  # `stdio-proxy` hostname resolves locally for agentgateway, avoiding the
+  # cross-stack DNS collision that commit 6e7fc82 fixed. The /local-pypi
+  # mount mirrors the standalone stdio-proxy override so psmcp (photoshop)
+  # can find its package index — `include:` doesn't pull override.yml in.
+  stdio-proxy:
+    networks:
+      - default
+      - ai-shared
+    volumes:
+      - ~/.local-pypi:/local-pypi:ro
+
   # agentgateway - MCP Gateway/Proxy
   agentgateway:
     image: ghcr.io/agentgateway/agentgateway:latest

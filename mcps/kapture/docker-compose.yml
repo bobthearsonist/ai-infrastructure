@@ -1,0 +1,31 @@
+name: kapture
+
+services:
+  kapture:
+    image: node:20-alpine
+    container_name: kapture-server
+    restart: unless-stopped
+    command: ["npx", "-y", "kapture-mcp@latest"]
+    ports:
+      - "61822:61822"
+    volumes:
+      - kapture_npm_cache:/root/.npm
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:61822/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      ai-shared:
+        aliases:
+          - kapture
+          - kapture-server
+
+volumes:
+  kapture_npm_cache:
+
+networks:
+  ai-shared:
+    name: ai-shared
+    external: true

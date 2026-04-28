@@ -4,6 +4,19 @@ include:
   - path: ../../mcps/stdio-proxy/docker-compose.yml
 
 services:
+  # Extend the included stdio-proxy to also reach ai-shared services
+  # (e.g. kapture-server). The private `default` network stays primary so
+  # `stdio-proxy` hostname resolves locally for mcpx, avoiding the
+  # cross-stack DNS collision that commit 6e7fc82 fixed. The /local-pypi
+  # mount mirrors the standalone stdio-proxy override so psmcp (photoshop)
+  # can find its package index — `include:` doesn't pull override.yml in.
+  stdio-proxy:
+    networks:
+      - default
+      - ai-shared
+    volumes:
+      - ~/.local-pypi:/local-pypi:ro
+
   # MCPX Gateway - MCP Proxy Server
   # https://docs.lunar.dev/mcpx/architecture
   # Changelog: https://github.com/TheLunarCompany/lunar/blob/main/mcpx/CHANGELOG.md
@@ -69,7 +82,8 @@ services:
       - "9443:9443" # HTTPS MCPX API port
       - "5443:5443" # HTTPS Control Plane UI port
       - "9222:9222" # Chrome DevTools Protocol proxy port
-      - "61822:61822" # Kapture WebSocket server port
+      # Kapture WebSocket (61822) is now served by the kapture-server container
+      # in mcps/kapture/docker-compose.yml — do NOT publish it here.
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./certs/tls/cert.pem:/etc/ssl/certs/cert.pem:ro
