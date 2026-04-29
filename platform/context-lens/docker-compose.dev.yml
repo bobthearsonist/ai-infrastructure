@@ -23,15 +23,43 @@ services:
     environment:
       CONTEXT_LENS_BIND_HOST: "0.0.0.0"
       CONTEXT_LENS_MAX_SESSIONS: "${CONTEXT_LENS_MAX_SESSIONS:-1000}"
+      NODE_OPTIONS: "--max-old-space-size=8192"
+    deploy:
+      resources:
+        limits:
+          memory: 10g
+    healthcheck:
+      # Build from source (~4 min) + session data loading (~2-3 min) before
+      # the analysis server binds port 4041. Failures during this window are
+      # expected and should not mark the container unhealthy.
+      start_period: 420s
     command:
       - |
+        # --- Wait for WSL bind mount to become ready ---
+        timeout=30; elapsed=0
+        while [ ! -f /app/package.json ]; do
+          elapsed=$$((elapsed + 1))
+          if [ "$$elapsed" -ge "$$timeout" ]; then
+            echo "FATAL: /app/package.json not found after $${timeout}s — is CONTEXT_LENS_SRC mounted?" >&2
+            exit 1
+          fi
+          [ "$$((elapsed % 5))" -eq 0 ] && echo "Waiting for source mount... ($${elapsed}/$${timeout}s)"
+          sleep 1
+        done
+        echo "Source mount ready."
+
+        # --- Setup (fail fast, but tolerate pnpm prepare scripts) ---
+        set -e
         apt-get update && apt-get install -y --no-install-recommends procps git && rm -rf /var/lib/apt/lists/*
         corepack enable
-        pnpm install
+        pnpm install --ignore-scripts
         cd ui && pnpm install && cd ..
         npm install -g concurrently nodemon
         pnpm run build
         pnpm run build:ui
+        set +e
+
+        # --- Dev servers ---
         concurrently -k -n tsc,srv,ui -c blue,green,magenta \
           "npx tsc --watch --preserveWatchOutput" \
           "nodemon --delay 1 --watch dist dist/cli.js -- --no-open" \

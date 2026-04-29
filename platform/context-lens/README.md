@@ -106,18 +106,85 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 ## Client Configuration
 
-### Claude Code (terminal and VS Code extension)
+### Where ANTHROPIC_BASE_URL is set
 
-Point Claude Code at the built-in proxy:
+The `ANTHROPIC_BASE_URL` environment variable redirects Anthropic API calls to the Context Lens proxy. It's configured in two places depending on how you use Claude Code:
+
+**1. Windows User Environment Variable (for terminal-based Claude Code)**
+
+Set a user-level environment variable that all shells inherit:
+
+```bash
+setx ANTHROPIC_BASE_URL "http://127.0.0.1:4040/claude"
+```
+
+This affects Git Bash, PowerShell, CMD, and any terminal session. Restart your terminal after setting it.
+
+**2. VS Code Settings (for Claude Code extension)**
+
+Add to your VS Code `settings.json`:
 
 ```jsonc
 // VS Code settings.json
 "claudeCode.environmentVariables": {
     "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
+},
+"terminal.integrated.env.windows": {
+    "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
 }
 ```
 
-> If Context Lens is not running, Claude Code will fail to connect to the API. Remove or comment out the env var when not using the proxy.
+The `claudeCode.environmentVariables` setting affects the extension's API calls, while `terminal.integrated.env.windows` ensures integrated terminals also use the proxy.
+
+### Disabling the proxy
+
+If Context Lens is not running, Claude Code will fail to connect to the API. Here's how to disable the proxy:
+
+**Temporary (single session)**
+
+In your current terminal, unset the variable before running Claude Code:
+
+```bash
+# Bash/Git Bash
+unset ANTHROPIC_BASE_URL
+claude
+
+# PowerShell
+$env:ANTHROPIC_BASE_URL = ""
+claude
+
+# Or prefix the command
+ANTHROPIC_BASE_URL= claude
+```
+
+**Permanent**
+
+1. **Remove the Windows environment variable:**
+   ```bash
+   setx ANTHROPIC_BASE_URL ""
+   ```
+   Or use System Properties → Environment Variables → User variables → delete `ANTHROPIC_BASE_URL`
+
+2. **Remove or comment out the VS Code settings:**
+   ```jsonc
+   // "claudeCode.environmentVariables": {
+   //     "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
+   // },
+   ```
+
+3. **Restart VS Code and any open terminals** for changes to take effect.
+
+**Note:** OpenCode using the `github-copilot/` model provider is unaffected by `ANTHROPIC_BASE_URL` since it routes through GitHub Copilot's API, not Anthropic's directly.
+
+### Claude Code (terminal and VS Code extension)
+
+Point Claude Code at the built-in proxy using the methods described in "Where ANTHROPIC_BASE_URL is set" above.
+
+### OpenCode
+
+OpenCode using `github-copilot/claude-*` model IDs routes through GitHub Copilot's API and is **not affected** by `ANTHROPIC_BASE_URL`. The proxy does not intercept these calls.
+
+If you switch to a raw `anthropic/claude-*` model ID in OpenCode, you would need to set `ANTHROPIC_BASE_URL` the same way as for Claude Code (Windows environment variable or VS Code settings).
 
 ### VS Code Copilot, Codex, and other HTTPS-only tools
 

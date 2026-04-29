@@ -32,20 +32,31 @@ services:
     environment:
       CONTEXT_LENS_BIND_HOST: "0.0.0.0"
       CONTEXT_LENS_MAX_SESSIONS: "1000"
+      NODE_OPTIONS: "--max-old-space-size=8192"
+    deploy:
+      resources:
+        limits:
+          memory: 10g
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:4041').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      # Verify both the reverse proxy (4040) and the web UI / ingest API (4041)
+      # are functional. These are separate Node processes — one can crash while
+      # the other lives, so both must be checked.
+      test: ["CMD-SHELL", "node -e \"Promise.all([fetch('http://localhost:4041').then(r=>{if(!r.ok)throw r.status}),new Promise((y,n)=>{const s=require('net').createConnection(4040,'localhost',()=>{s.end();y()});s.on('error',n);s.setTimeout(2000,()=>{s.destroy();n()})})]).then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 3
       start_period: 30s
 
   mitmproxy:
     image: mitmproxy/mitmproxy:latest
     container_name: context-lens-mitmproxy
     restart: unless-stopped
+    # Startup ordering only — mitmproxy does not require context-lens to be
+    # healthy. The addon POSTs captures to the ingest API; failures are logged
+    # and the intercepted traffic still flows to upstream APIs unaffected.
     depends_on:
       context-lens:
-        condition: service_healthy
+        condition: service_started
     entrypoint: ["mitmdump"]
     command:
       - "-s"
@@ -66,3 +77,10 @@ services:
       - ${MITMPROXY_CERTS:-~/.mitmproxy}:/home/mitmproxy/.mitmproxy
     environment:
       CONTEXT_LENS_INGEST_URL: "http://context-lens:4041/api/ingest"
+    healthcheck:
+      # Verify mitmdump is accepting connections on the forward proxy port.
+      test: ["CMD", "python3", "-c", "import socket; s=socket.create_connection(('localhost',8080),2); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
