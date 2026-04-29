@@ -1,0 +1,11 @@
+# Dev image for context-lens — bakes in system deps so container startup
+# only needs to install project dependencies and build.
+FROM node:22-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends procps git \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable \
+    && npm install -g concurrently nodemon
+
+WORKDIR /app

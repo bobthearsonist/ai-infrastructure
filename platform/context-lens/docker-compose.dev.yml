@@ -11,12 +11,20 @@
 #   4041 - Analysis API
 #   5175 - Vite dev server (UI hot-reload, remapped from 5173)
 
+volumes:
+  context-lens-node-modules:
+  context-lens-ui-node-modules:
+
 services:
   context-lens:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: context-lens-dev
     volumes:
       - ${CONTEXT_LENS_SRC:-.}:/app
-      - /app/node_modules
-      - /app/ui/node_modules
+      - context-lens-node-modules:/app/node_modules
+      - context-lens-ui-node-modules:/app/ui/node_modules
       - ${CONTEXT_LENS_DATA:-~/.context-lens/data}:/root/.context-lens/data
     ports:
       - "5175:5173"
@@ -29,13 +37,12 @@ services:
         limits:
           memory: 10g
     healthcheck:
-      # Build from source (~4 min) + session data loading (~2-3 min) before
-      # the analysis server binds port 4041. Failures during this window are
-      # expected and should not mark the container unhealthy.
+      # Build from source (~30s subsequent, ~2 min first) + session data
+      # loading (~2-3 min) before the analysis server binds port 4041.
       start_period: 420s
     command:
       - |
-        # --- Wait for WSL bind mount to become ready ---
+        # --- Wait for bind mount to become ready ---
         timeout=30; elapsed=0
         while [ ! -f /app/package.json ]; do
           elapsed=$$((elapsed + 1))
@@ -48,15 +55,18 @@ services:
         done
         echo "Source mount ready."
 
-        # --- Setup (fail fast, but tolerate pnpm prepare scripts) ---
+        # --- Install and build (fast on subsequent runs — named volumes persist node_modules) ---
         set -e
-        apt-get update && apt-get install -y --no-install-recommends procps git && rm -rf /var/lib/apt/lists/*
-        corepack enable
         pnpm install --ignore-scripts
         cd ui && pnpm install && cd ..
-        npm install -g concurrently nodemon
-        pnpm run build
-        pnpm run build:ui
+        if [ ! -f /app/dist/cli.js ]; then
+          echo "Building backend (first run)..."
+          pnpm run build
+        fi
+        if [ ! -f /app/ui/dist/index.html ]; then
+          echo "Building UI (first run)..."
+          pnpm run build:ui
+        fi
         set +e
 
         # --- Dev servers ---

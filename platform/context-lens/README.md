@@ -106,97 +106,97 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 ## Client Configuration
 
-### Where ANTHROPIC_BASE_URL is set
+### Setting ANTHROPIC_BASE_URL
 
-The `ANTHROPIC_BASE_URL` environment variable redirects Anthropic API calls to the Context Lens proxy. It's configured in two places depending on how you use Claude Code:
+The `ANTHROPIC_BASE_URL` environment variable redirects Anthropic API calls through the Context Lens proxy. Set it wherever your AI client inherits environment from.
 
-**1. Windows User Environment Variable (for terminal-based Claude Code)**
+**Shell profile (macOS / Linux / WSL)**
 
-Set a user-level environment variable that all shells inherit:
+Add to `~/.bashrc`, `~/.zshrc`, or equivalent:
 
 ```bash
+export ANTHROPIC_BASE_URL="http://127.0.0.1:4040/claude"
+```
+
+**Windows user environment variable**
+
+```cmd
 setx ANTHROPIC_BASE_URL "http://127.0.0.1:4040/claude"
 ```
 
-This affects Git Bash, PowerShell, CMD, and any terminal session. Restart your terminal after setting it.
+Restart your terminal after running `setx`.
 
-**2. VS Code Settings (for Claude Code extension)**
+**VS Code settings (all platforms)**
 
 Add to your VS Code `settings.json`:
 
 ```jsonc
-// VS Code settings.json
 "claudeCode.environmentVariables": {
     "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
 },
+
+// Also set for integrated terminals (pick your platform):
 "terminal.integrated.env.windows": {
+    "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
+},
+"terminal.integrated.env.osx": {
+    "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
+},
+"terminal.integrated.env.linux": {
     "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
 }
 ```
 
-The `claudeCode.environmentVariables` setting affects the extension's API calls, while `terminal.integrated.env.windows` ensures integrated terminals also use the proxy.
+`claudeCode.environmentVariables` affects the extension's API calls. The `terminal.integrated.env.*` settings ensure integrated terminals also use the proxy.
 
 ### Disabling the proxy
 
-If Context Lens is not running, Claude Code will fail to connect to the API. Here's how to disable the proxy:
+If Context Lens is not running, Claude Code will fail to connect. Disable the proxy temporarily or permanently:
 
 **Temporary (single session)**
 
-In your current terminal, unset the variable before running Claude Code:
-
 ```bash
-# Bash/Git Bash
+# Bash / Zsh (macOS, Linux, Git Bash, WSL)
 unset ANTHROPIC_BASE_URL
 claude
+```
 
-# PowerShell
+```powershell
+# PowerShell (Windows)
 $env:ANTHROPIC_BASE_URL = ""
 claude
-
-# Or prefix the command
-ANTHROPIC_BASE_URL= claude
 ```
 
 **Permanent**
 
-1. **Remove the Windows environment variable:**
-   ```bash
-   setx ANTHROPIC_BASE_URL ""
-   ```
-   Or use System Properties → Environment Variables → User variables → delete `ANTHROPIC_BASE_URL`
+1. **Shell profile**: Remove or comment out the `export ANTHROPIC_BASE_URL=...` line from your shell RC file.
+2. **Windows env var**: Delete via System Properties → Environment Variables, or run `setx ANTHROPIC_BASE_URL ""`.
+3. **VS Code settings**: Remove or comment out the `claudeCode.environmentVariables` and `terminal.integrated.env.*` entries.
+4. Restart VS Code and any open terminals.
 
-2. **Remove or comment out the VS Code settings:**
-   ```jsonc
-   // "claudeCode.environmentVariables": {
-   //     "ANTHROPIC_BASE_URL": "http://localhost:4040/claude"
-   // },
-   ```
+### Claude Code
 
-3. **Restart VS Code and any open terminals** for changes to take effect.
-
-**Note:** OpenCode using the `github-copilot/` model provider is unaffected by `ANTHROPIC_BASE_URL` since it routes through GitHub Copilot's API, not Anthropic's directly.
-
-### Claude Code (terminal and VS Code extension)
-
-Point Claude Code at the built-in proxy using the methods described in "Where ANTHROPIC_BASE_URL is set" above.
+Point Claude Code at the proxy using any of the methods in [Setting ANTHROPIC_BASE_URL](#setting-anthropic_base_url) above.
 
 ### OpenCode
 
-OpenCode using `github-copilot/claude-*` model IDs routes through GitHub Copilot's API and is **not affected** by `ANTHROPIC_BASE_URL`. The proxy does not intercept these calls.
+OpenCode using `github-copilot/claude-*` model IDs routes through GitHub Copilot's API and is **not affected** by `ANTHROPIC_BASE_URL`.
 
-If you switch to a raw `anthropic/claude-*` model ID in OpenCode, you would need to set `ANTHROPIC_BASE_URL` the same way as for Claude Code (Windows environment variable or VS Code settings).
+If you switch to a raw `anthropic/claude-*` model ID, set `ANTHROPIC_BASE_URL` the same way as for Claude Code.
 
 ### VS Code Copilot, Codex, and other HTTPS-only tools
 
 These tools can't set a custom base URL, so they go through mitmproxy on port 8080 instead.
 
-**Option A: PAC file** -- a `proxy.pac` is included that routes `githubcopilot.com` and `api.anthropic.com` through mitmproxy:
+**Option A: PAC file** — a `proxy.pac` is included that routes `githubcopilot.com` and `api.anthropic.com` through mitmproxy:
 
 ```jsonc
 // VS Code settings.json
-"http.proxyAutoconfigUrl": "file:///C:/Users/YourName/.context-lens/proxy.pac",
+"http.proxyAutoconfigUrl": "file:///path/to/.context-lens/proxy.pac",
 "http.proxyStrictSSL": false
 ```
+
+> Replace `/path/to/` with your actual home directory (e.g., `C:/Users/YourName` on Windows, `/Users/yourname` on macOS).
 
 **Option B: Environment variable**
 
@@ -204,14 +204,26 @@ These tools can't set a custom base URL, so they go through mitmproxy on port 80
 https_proxy=http://localhost:8080 SSL_CERT_FILE=~/.mitmproxy/mitmproxy-ca-cert.pem codex "prompt"
 ```
 
-## Windows Setup
+## Platform-Specific Setup
 
 ### mitmproxy CA certificate
 
-mitmproxy needs a trusted CA cert to intercept HTTPS. On first run it generates certs in `~/.mitmproxy/`. Install the root CA into the OS trust store:
+mitmproxy needs a trusted CA cert to intercept HTTPS. On first run it generates certs in `~/.mitmproxy/`.
 
-```bash
+**Windows:**
+```cmd
 certutil -addstore Root "%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.cer"
+```
+
+**macOS:**
+```bash
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/.mitmproxy/mitmproxy-ca-cert.pem
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+sudo cp ~/.mitmproxy/mitmproxy-ca-cert.pem /usr/local/share/ca-certificates/mitmproxy.crt
+sudo update-ca-certificates
 ```
 
 ## What It Shows
