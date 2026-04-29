@@ -42,8 +42,8 @@ services:
       # are functional. These are separate Node processes — one can crash while
       # the other lives, so both must be checked.
       test: ["CMD-SHELL", "node -e \"Promise.all([fetch('http://localhost:4041').then(r=>{if(!r.ok)throw r.status}),new Promise((y,n)=>{const s=require('net').createConnection(4040,'localhost',()=>{s.end();y()});s.on('error',n);s.setTimeout(2000,()=>{s.destroy();n()})})]).then(()=>process.exit(0)).catch(()=>process.exit(1))\""]
-      interval: 10s
-      timeout: 5s
+      interval: 15s
+      timeout: 30s
       retries: 3
       start_period: 30s
 
