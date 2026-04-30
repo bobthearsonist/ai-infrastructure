@@ -50,6 +50,8 @@ __pycache__/
 mcps/stdio-proxy/servers.*.json
 !mcps/stdio-proxy/servers.json
 !mcps/stdio-proxy/servers.example.json
+mcps/mcpx/mcp.*.json
+!mcps/mcpx/mcp.example.json
 
 # Qdrant MCP configs (machine-specific)
 mcps/qdrant-mcp/servers.json
