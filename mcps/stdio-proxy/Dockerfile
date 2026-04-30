@@ -12,7 +12,7 @@ RUN apk add --no-cache python3 py3-pip curl bash && \
     uv --version && uvx --version
 
 # Install Azure CLI for azure-devops MCP (azcli auth mode)
-RUN uv tool install azure-cli
+RUN uv tool install azure-cli --extra-index-url https://azcliprod.blob.core.windows.net/pip --prerelease=allow
 
 # servers.json must be provided via volume mount (per-machine config)
 
