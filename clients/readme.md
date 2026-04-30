@@ -73,6 +73,12 @@ When using agentgateway, include an `x-client-id` header for tracking:
 | Kilo Code | `x-client-id: kilocode` |
 | Goose | `x-client-id: goose` |
 
+## LLM Proxy (Context Lens)
+
+[Context Lens](../platform/context-lens/README.md) intercepts LLM API traffic for context window analysis. Clients that call the Anthropic API directly (Claude Code) are routed through the proxy via `ANTHROPIC_BASE_URL`. Clients using gateway providers (OpenCode via `github-copilot/`) are unaffected.
+
+See the [Context Lens README](../platform/context-lens/README.md#client-configuration) for setup and troubleshooting.
+
 ## Symlinks
 
 Symlink client config files into this directory for version control. Use `ln -s` (macOS/Linux) or `mklink` (Windows, elevated).
