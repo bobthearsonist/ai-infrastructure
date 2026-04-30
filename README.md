@@ -19,98 +19,106 @@ title AI Infrastructure Architecture
 
 ' === AI Clients ===
 package "AI Clients" as clients #E3F2FD {
+  [Claude Code] as claude_code
   [VS Code Copilot] as vscode
   [Claude Desktop] as claude
-  [Cline] as cline
-  [Other Clients] as other
+  [Cline / Other] as other
 }
 
-' === Gateway Layer ===
-package "Gateway Layer" as gateway_layer #E8F5E9 {
-  component "agentgateway\n:3847 (HTTP)\n:15001 (Admin UI)\n:15020 (Metrics)" as agentgateway #C8E6C9
-  component "nginx-proxy\n:3443 (HTTPS)\n:9223 (CDP)" as nginx #A5D6A7
+' === LLM Proxy (standalone, implicit default network) ===
+package "Context Lens (implicit network)" as cl_stack #E0F7FA {
+  component "context-lens\n:4040 (reverse proxy)\n:4041 (web UI + ingest API)" as context_lens #80DEEA
+  component "mitmproxy\n:8080 (HTTPS forward proxy)" as mitmproxy #4DD0E1
 }
 
-' === MCP Backends - Currently Running ===
-package "Running MCPs" as running #FFF3E0 {
-  component "stdio-proxy\n:7030 (SSE)\n:61822 (Kapture WS)" as stdio_proxy #FFCC80
-
-  package "stdio MCPs" as stdio_mcps #FFE0B2 {
-    [sequential-thinking\n(1 tool)] as seq_think
-    [memory\n(8 tools)] as memory
-    [kapture\n(15+ tools)] as kapture_mcp
-  }
+' === Gateway Stacks (each has private default + ai-shared) ===
+package "agentgateway stack (private + ai-shared)" as ag_stack #E8F5E9 {
+  component "agentgateway\n:3847 (MCP)\n:15001 (Admin UI)\n:15020 (Metrics)" as agentgateway #C8E6C9
+  component "nginx-proxy\n:3443 (HTTPS)\n:9223 (CDP proxy)" as ag_nginx #A5D6A7
+  component "stdio-proxy (included)\nseq-thinking, azure-devops" as ag_stdio #81C784
 }
 
-' === SSE-based MCPs - Running ===
-package "SSE MCPs" as sse_mcps #FFF3E0 {
+package "mcpx stack (private + ai-shared)" as mcpx_stack #E8F5E9 {
+  component "mcpx (Lunar.dev)\n:9000 (MCP)\n:5173 (Control Plane)" as mcpx #C8E6C9
+  component "nginx-ssl\n:9443 (HTTPS MCP)\n:5443 (HTTPS UI)\n:9222 (CDP)\n:61822 (Kapture WS)" as mcpx_nginx #A5D6A7
+  component "stdio-proxy (included)\nseq-thinking, kapture" as mcpx_stdio #81C784
+  component "lunar-proxy\n:8000 (rate limiting)\n(not actively routed)" as lunar #E0E0E0
+}
+
+' === Shared MCPs (ai-shared network) ===
+package "Shared MCPs (ai-shared)" as shared_mcps #FFF3E0 {
   [context7\n:7008] as context7 #FFCC80
-  [playwright\n:7007] as playwright #FFCC80
-  [browser-use\n:7011] as browser_use #FFCC80
-  [hass-mcp\n:7010] as hass_mcp #FFCC80
   [qdrant-mcp\n:7020] as qdrant_mcp #FFCC80
+  [memory\n:7040 (singleton)] as memory #FFCC80
+  [playwright\n:7007] as playwright #FFE0B2
+  [browser-use\n:7011] as browser_use #FFE0B2
+  [hass-mcp\n:7010] as hass_mcp #FFE0B2
 }
 
-' === Platform Services ===
-package "Platform Services" as platform #F3E5F5 {
-  [Langfuse\n:3100 (UI)\n(LLM Observability)] as langfuse #CE93D8
-  [langfuse-mcp\n:7012] as langfuse_mcp #E1BEE7
+' === Backing Services ===
+package "Backing Services (ai-shared)" as backing #F3E5F5 {
+  [Qdrant\n:6333 (HTTP)\n:6334 (gRPC)] as qdrant #CE93D8
+  [Langfuse\n:3100 (UI)] as langfuse #CE93D8
+  [Watchtower\n(auto-update)] as watchtower #E1BEE7
 }
 
-' === Observability Stack ===
-package "Observability" as observability #E1F5FE {
-  component "OpenTelemetry\nCollector\n:4317/:4318 (internal)" as otel #81D4FA
+' === Observability ===
+package "Observability (ai-shared)" as observability #E1F5FE {
+  component "OTel Collector\n:4317/:4318 (internal)" as otel #81D4FA
   component "Jaeger\n:16686 (UI)" as jaeger #4FC3F7
   component "Prometheus\n:9090" as prometheus #29B6F6
   component "Grafana\n:3000" as grafana #03A9F4
 }
 
 ' === Connections ===
-' Clients to Gateway
-vscode --> agentgateway : HTTP\nx-client-id
-claude --> agentgateway : HTTP\nx-client-id
-cline --> agentgateway : HTTP\nx-client-id
-other --> nginx : HTTPS
+' Clients to Context Lens
+claude_code --> context_lens : ANTHROPIC_BASE_URL\n:4040
+vscode --> mitmproxy : HTTPS_PROXY\n:8080
+mitmproxy --> context_lens : POST /api/ingest\n:4041
 
-' nginx to agentgateway
-nginx --> agentgateway : proxy
+' Clients to Gateways
+claude_code --> agentgateway : MCP :3847\nx-client-id
+claude --> mcpx : MCP :9000
+other --> ag_nginx : HTTPS :3443
 
-' agentgateway to MCPs
-agentgateway --> stdio_proxy : SSE
-agentgateway --> context7 : SSE
-agentgateway --> playwright : SSE
-agentgateway --> browser_use : SSE
-agentgateway --> hass_mcp : SSE
+' TLS proxies
+ag_nginx --> agentgateway : reverse proxy
+mcpx_nginx --> mcpx : reverse proxy
+
+' Gateways to private stdio-proxies
+agentgateway --> ag_stdio : private network
+mcpx --> mcpx_stdio : private network
+
+' Gateways to shared MCPs (via ai-shared)
+agentgateway --> context7 : SSE (ai-shared)
 agentgateway --> qdrant_mcp : SSE
-agentgateway --> langfuse_mcp : MCP
+agentgateway --> memory : SSE
+mcpx --> context7 : SSE (ai-shared)
+mcpx --> qdrant_mcp : SSE
+mcpx --> memory : SSE
 
-' stdio-proxy to stdio MCPs
-stdio_proxy --> seq_think : stdio
-stdio_proxy --> memory : stdio
-stdio_proxy --> kapture_mcp : stdio
+' Backing
+qdrant_mcp --> qdrant : :6333
 
-' Langfuse MCP to Langfuse platform
-langfuse_mcp --> langfuse : API
-
-' Browser to Langfuse
-browser .up.> langfuse : UI
-
-' Observability connections
+' Observability
 agentgateway --> otel : OTLP traces
 otel --> jaeger : traces
 otel --> prometheus : span metrics
-agentgateway --> prometheus : metrics scrape
 grafana --> prometheus : query
 grafana --> jaeger : query
 
 ' Legend
 legend right
-  |= Color |= Status |
+  |= Color |= Layer |
+  | <#80DEEA> | LLM Proxy (standalone) |
   | <#C8E6C9> | Gateway |
-  | <#FFCC80> | Running MCP |
+  | <#A5D6A7> | TLS Termination |
+  | <#81C784> | stdio-proxy (per-stack) |
+  | <#FFCC80> | Shared MCP (running) |
+  | <#FFE0B2> | Shared MCP (available) |
+  | <#CE93D8> | Backing Service |
   | <#81D4FA> | Observability |
-  | <#CE93D8> | Platform Service |
-  | <#E1BEE7> | Planned |
+  | <#E0E0E0> | Inactive |
 endlegend
 
 @enduml
@@ -118,66 +126,87 @@ endlegend
 
 ## Current Status
 
-| Component | Status | Tools |
-| --------- | ------ | ----- |
-| agentgateway | ✅ Running | - |
-| sequential-thinking | ✅ Running | 1 |
-| memory | ✅ Running | 8 |
-| kapture | ✅ Running | 15+ |
-| context7 | ✅ Running | 2 |
-| playwright | ✅ Running | 15+ |
-| browser-use | ✅ Running | 10+ |
-| hass-mcp | ✅ Running | 5+ |
-| qdrant-mcp | ✅ Running | 6 |
-| langfuse | ✅ Available | - |
-| **Total** | | **62+ tools** |
+### Compose Stacks
+
+Each stack is a self-contained `docker compose` unit. Stacks with a stdio-proxy include it from the shared template (`mcps/stdio-proxy/`) — each gets its own instance on a private network to avoid DNS collisions.
+
+**agentgateway** (`gateways/agentgateway/`) — Linux Foundation MCP gateway
+
+| Service | What it does | Host Ports |
+| ------- | ------------ | ---------- |
+| agentgateway | Routes MCP requests to 10+ backends; CORS, stateless SSE mode | :3847 (MCP), :15001 (Admin UI), :15020 (Metrics) |
+| nginx-proxy | TLS termination for agentgateway; reverse-proxies `/mcp` and `/sse`; proxies Chrome DevTools Protocol from :9223 → host :9222 | :3443 (HTTPS MCP), :15443 (HTTPS Admin), :9223 (CDP) |
+| stdio-proxy | Bridges stdio MCPs: sequential-thinking, azure-devops | (internal :7030) |
+| mcp-status | Polls stdio-proxy /status every 30s, logs per-MCP health | — |
+
+**mcpx** (`mcps/mcpx/`) — Lunar.dev MCP gateway with tool groups and per-client access control
+
+| Service | What it does | Host Ports |
+| ------- | ------------ | ---------- |
+| mcpx | Multiplexes MCP servers with tool grouping (core, coding, browser, creative, home) and consumer auth | :9000 (MCP), :5173 (Control Plane UI), :9001 (internal), :3100 (metrics, remapped from 3000) |
+| nginx-ssl | TLS termination for mcpx; proxies `/mcp` and `/sse` on :9443; serves Control Plane on :5443; proxies CDP on :9222 → host :9222; proxies Kapture WS on :61822 | :9443 (HTTPS MCP), :5443 (HTTPS UI), :9222 (CDP), :61822 (Kapture WS) |
+| stdio-proxy | Bridges stdio MCPs: sequential-thinking, kapture (config varies per machine via `$SERVERS_CONFIG`) | (internal :7030) |
+| mcp-status | Polls stdio-proxy /status every 30s, logs per-MCP health | — |
+| lunar-proxy | API gateway for rate limiting / observability (defined but not actively routed through) | :8000, :8040, :8081 |
+
+**context-lens** (`platform/context-lens/`) — LLM API traffic interception and context window analysis
+
+| Service | What it does | Host Ports |
+| ------- | ------------ | ---------- |
+| context-lens | Reverse proxy (:4040) intercepts calls from clients using `ANTHROPIC_BASE_URL`; web UI + ingest API (:4041) analyzes context composition, cost, waste | :4040 (proxy), :4041 (web UI), :5175 (Vite dev, dev mode) |
+| mitmproxy | HTTPS forward proxy for clients that can't set a custom base URL (Copilot, Codex); addon POSTs captures to ingest API asynchronously | :8080 |
+
+**qdrant** (`mcps/qdrant-mcp/`) — Vector database and semantic search MCP
+
+| Service | What it does | Host Ports |
+| ------- | ------------ | ---------- |
+| qdrant | Vector database for RAG embeddings (work notes, code, personal) | :6333 (HTTP), :6334 (gRPC) |
+| qdrant-mcp | FastEmbed-powered semantic search via MCP protocol | :7020 |
+
+### Shared MCPs (ai-shared network)
+
+These run as standalone containers, reachable by both gateways over the `ai-shared` network.
+
+| MCP | Port | Status | Tools |
+| --- | ---- | ------ | ----- |
+| context7 | :7008 | ✅ Running | 2 |
+| qdrant-mcp | :7020 | ✅ Running | 6 |
+| memory (singleton — shared by both gateways to prevent write races) | :7040 | ✅ Running | 8 |
+| playwright | :7007 | ⬚ Available | 15+ |
+| browser-use | :7011 | ⬚ Available | 10+ |
+| hass-mcp | :7010 | ⬚ Available | 5+ |
+
+### Platform Services
+
+| Service | Compose Path | Status | Ports |
+| ------- | ------------ | ------ | ----- |
+| Watchtower (label-based auto image updates) | `platform/watchtower/` | ✅ Running | — |
+| Langfuse (LLM observability, prompts, evals) | `platform/langfuse/` | ⬚ Available | :3100 (UI), :3101 (MCP auth proxy) |
+| Observability (Prometheus, Grafana, Jaeger, OTel Collector) | `platform/observability/` | ⬚ Available | :9090, :3000, :16686 |
 
 ## Network Architecture
 
-```plantuml
-@startuml network-ports
-!theme plain
-skinparam backgroundColor #FEFEFE
-skinparam defaultFontName Consolas
-skinparam rectangleBorderColor #666666
-skinparam rectangleBackgroundColor #F5F5F5
+### Docker Networks
 
-title Host ↔ Docker Port Mappings
+| Network | Type | Purpose | Services |
+| ------- | ---- | ------- | -------- |
+| `ai-shared` | External | Hub network for all shared MCPs, backing services, and observability | Both gateways, all standalone MCPs, qdrant, watchtower, langfuse (web/worker/proxy), observability stack |
+| `agentgateway_default` | Stack-private | Isolates agentgateway's stdio-proxy from DNS collisions | agentgateway, nginx-proxy, stdio-proxy, mcp-status |
+| `mcpx_default` | Stack-private | Isolates mcpx's stdio-proxy from DNS collisions | mcpx, nginx-ssl, stdio-proxy, mcp-status |
+| `context-lens_default` | Implicit | Context Lens + mitmproxy internal communication | context-lens, mitmproxy |
+| `langfuse-internal` | Stack-private | Isolates Langfuse storage (postgres, redis, clickhouse, minio) | langfuse-postgres, langfuse-redis, langfuse-clickhouse, langfuse-minio |
 
-rectangle "HOST" as host {
-  rectangle "AI Clients" as clients #E3F2FD
-  rectangle "Chrome :9222" as chrome #FFF9C4
-  rectangle "Browser" as browser #E1F5FE
-}
+Both gateway services (agentgateway, mcpx) join **two** networks: their stack's private `default` (to reach their own stdio-proxy) and `ai-shared` (to reach shared MCPs). This is why stdio-proxy is included as a compose template rather than run as a shared service — each stack gets its own instance on its own network.
 
-rectangle "DOCKER (ai-infrastructure network)" as docker {
-  rectangle ":3847 agentgateway" as gw #C8E6C9
-  rectangle ":15001 Admin UI" as admin #C8E6C9
-  rectangle ":3443/:9223 nginx" as nginx #A5D6A7
-  rectangle ":7030/:61822 stdio-proxy" as stdio #FFCC80
-  rectangle ":7020 qdrant-mcp" as qdrant #FFCC80
-  rectangle ":3000 Grafana" as grafana #81D4FA
-  rectangle ":9090 Prometheus" as prom #81D4FA
-  rectangle ":16686 Jaeger" as jaeger #81D4FA
-  rectangle ":3100 Langfuse" as langfuse #CE93D8
-}
-
-clients -down-> gw : "HTTP :3847"
-clients -down-> admin : "HTTP :15001"
-browser -down-> grafana : ":3000"
-browser -down-> prom : ":9090"
-browser -down-> jaeger : ":16686"
-browser -down-> langfuse : ":3100"
-nginx -up-> chrome : "CDP :9223→:9222"
-
-@enduml
-```
-
-**Internal Docker Network (ai-infrastructure):**
+### Internal Docker Traffic (ai-shared)
 
 | From | To | Port | Purpose |
 | ---- | -- | ---- | ------- |
-| agentgateway | stdio-proxy | 7030 | SSE to stdio MCPs |
+| agentgateway / mcpx | context7_mcp | 7008 | Library docs MCP |
+| agentgateway / mcpx | qdrant-mcp | 7020 | Semantic search MCP |
+| agentgateway / mcpx | memory_mcp | 7040 | Knowledge graph MCP (singleton) |
+| agentgateway / mcpx | stdio-proxy (own stack) | 7030 | stdio MCPs (private network) |
+| qdrant-mcp | qdrant | 6333 | Vector DB queries |
 | agentgateway | otel-collector | 4317 | OTLP traces |
 | otel-collector | jaeger | 14317 | Trace export |
 | otel-collector | (self) | 8889 | Span metrics |
@@ -185,6 +214,7 @@ nginx -up-> chrome : "CDP :9223→:9222"
 | prometheus | otel-collector | 8889 | Span metrics scrape |
 | grafana | prometheus | 9090 | Metrics queries |
 | grafana | jaeger | 16686 | Trace queries |
+| mitmproxy | context-lens | 4041 | POST captures to ingest API |
 
 ## Directory Structure
 
@@ -220,29 +250,33 @@ ai-infrastructure/
 
 | Gateway | Description | Status |
 | ------- | ----------- | ------ |
-| [agentgateway](gateways/agentgateway/readme.md) | Linux Foundation MCP gateway with auth, RBAC, rate limiting | ✅ Running |
+| [agentgateway](gateways/agentgateway/readme.md) | Linux Foundation MCP gateway — routes to 10+ backends, stateless SSE, CORS, OTLP traces | ✅ Running |
+| [mcpx](mcps/mcpx/) | Lunar.dev MCP gateway — tool grouping, per-consumer auth/RBAC, control plane UI | ✅ Running |
 
 ### MCP Servers
 
-| MCP | Description | Status | Docs |
-| --- | ----------- | ------ | ---- |
-| [sequential-thinking](mcps/sequential-thinking/readme.md) | Chain of thought reasoning | ✅ Running | [→](mcps/sequential-thinking/readme.md) |
-| [memory](mcps/memory/readme.md) | Knowledge graph & memory | ✅ Running | [→](mcps/memory/readme.md) |
-| [stdio-proxy](mcps/stdio-proxy/readme.md) | stdio→SSE bridge (mcp-proxy) | ✅ Running | [→](mcps/stdio-proxy/readme.md) |
-| [kapture](mcps/kapture/readme.md) | Chrome extension MCP | ✅ Running | [→](mcps/kapture/readme.md) |
-| [playwright](mcps/playwright/readme.md) | Browser automation | ✅ Running | [→](mcps/playwright/readme.md) |
-| [qdrant-mcp](mcps/qdrant-mcp/README.md) | Qdrant semantic search (work, code) | ✅ Running | [→](mcps/qdrant-mcp/README.md) |
-| [browser-use](mcps/browser-use/readme.md) | AI browser automation | ✅ Running | [→](mcps/browser-use/readme.md) |
-| [context7](mcps/context7/readme.md) | Context7 library docs | ✅ Running | [→](mcps/context7/readme.md) |
-| [hass-mcp](mcps/hass-mcp/readme.md) | Home Assistant | ✅ Running | [→](mcps/hass-mcp/readme.md) |
+Standalone MCPs run as their own containers on `ai-shared`. stdio MCPs run inside per-stack stdio-proxy instances.
+
+| MCP | Type | Description | Status | Docs |
+| --- | ---- | ----------- | ------ | ---- |
+| [context7](mcps/context7/readme.md) | Standalone | Library documentation lookup | ✅ Running | [→](mcps/context7/readme.md) |
+| [qdrant-mcp](mcps/qdrant-mcp/README.md) | Standalone | Semantic search (work notes, code, personal) | ✅ Running | [→](mcps/qdrant-mcp/README.md) |
+| [memory](mcps/memory/readme.md) | Standalone | Knowledge graph (singleton shared by both gateways) | ✅ Running | [→](mcps/memory/readme.md) |
+| [sequential-thinking](mcps/sequential-thinking/readme.md) | stdio | Chain of thought reasoning | ✅ Running | [→](mcps/sequential-thinking/readme.md) |
+| [kapture](mcps/kapture/readme.md) | stdio | Chrome extension bridge | ✅ Running | [→](mcps/kapture/readme.md) |
+| [stdio-proxy](mcps/stdio-proxy/readme.md) | Template | stdio→SSE bridge (included by gateway stacks) | ✅ Running | [→](mcps/stdio-proxy/readme.md) |
+| [playwright](mcps/playwright/readme.md) | Standalone | Browser automation | ⬚ Available | [→](mcps/playwright/readme.md) |
+| [browser-use](mcps/browser-use/readme.md) | Standalone | AI browser automation | ⬚ Available | [→](mcps/browser-use/readme.md) |
+| [hass-mcp](mcps/hass-mcp/readme.md) | Standalone | Home Assistant | ⬚ Available | [→](mcps/hass-mcp/readme.md) |
 
 ### Platform Services
 
 | Service | Description | Status | Docs |
 | ------- | ----------- | ------ | ---- |
-| [Observability](platform/observability/readme.md) | Prometheus, Grafana, Jaeger | ✅ Running | [→](platform/observability/readme.md) |
-| [Langfuse](platform/langfuse/README.md) | LLM observability, prompts, evals | ✅ Available | [→](platform/langfuse/README.md) |
-| [Context Lens](platform/context-lens/README.md) | LLM context window inspector (proxy + web UI) | ✅ Running | [→](platform/context-lens/README.md) |
+| [Context Lens](platform/context-lens/README.md) | LLM API interception proxy + context window analysis UI | ✅ Running | [→](platform/context-lens/README.md) |
+| [Watchtower](platform/watchtower/) | Label-based auto image updates (24h poll) | ✅ Running | [→](platform/watchtower/) |
+| [Observability](platform/observability/readme.md) | Prometheus, Grafana, Jaeger, OTel Collector | ⬚ Available | [→](platform/observability/readme.md) |
+| [Langfuse](platform/langfuse/README.md) | LLM observability, prompts, evals (includes postgres, redis, clickhouse, minio) | ⬚ Available | [→](platform/langfuse/README.md) |
 
 ### Clients
 
@@ -262,70 +296,129 @@ See [clients/readme.md](clients/readme.md) for configuration.
 docker network create ai-shared
 ```
 
-**Note**: The `ai-shared` network is created by the mcpx stack automatically. This step is only needed if you start other services before mcpx.
+**Note**: The `ai-shared` network is created by the first stack that defines it. This step is only needed if you want to start stacks in a different order.
 
-### 2. Start mcpx gateway (creates ai-shared network)
+### 2. Start mcpx gateway
 
 ```bash
 cd mcps/mcpx
-docker-compose up -d
+cp .env.example .env   # Edit: set MCP_CONFIG, optionally CUSTOM_CA_CERT
+docker compose up -d
 ```
 
 ### 3. Start agentgateway
 
 ```bash
 cd gateways/agentgateway
-docker-compose up -d
+docker compose up -d
 ```
 
-### 4. Start observability stack (optional)
+### 4. Start Qdrant + semantic search MCP
+
+```bash
+cd mcps/qdrant-mcp
+docker compose up -d
+```
+
+### 5. Start Context Lens (LLM traffic analysis)
+
+```bash
+cd platform/context-lens
+docker compose up -d
+```
+
+Then set `ANTHROPIC_BASE_URL=http://127.0.0.1:4040/claude` in your shell profile or VS Code settings. See [Context Lens README](platform/context-lens/README.md#client-configuration) for per-client setup.
+
+### 6. Start observability stack (optional)
 
 ```bash
 cd platform/observability
-docker-compose up -d
+docker compose up -d
 ```
 
-### 5. Start Langfuse (optional)
+### 7. Start Langfuse (optional)
 
 ```bash
 cd platform/langfuse
 docker compose up -d
 ```
 
-### 6. Access
+### 8. Access
 
-- **MCP Endpoint**: `http://localhost:3847/mcp`
-- **Admin UI**: `http://localhost:15001/ui`
-- **Grafana**: `http://localhost:3000` (admin/admin)
-- **Langfuse**: `http://localhost:3100` (create account on first visit)
+| Service | URL |
+| ------- | --- |
+| agentgateway MCP | `http://localhost:3847/mcp` |
+| agentgateway Admin UI | `http://localhost:15001/ui` |
+| mcpx MCP | `http://localhost:9000/mcp` |
+| mcpx Control Plane | `http://localhost:5173` |
+| Context Lens | `http://localhost:4041` |
+| Grafana | `http://localhost:3000` (admin/admin) |
+| Langfuse | `http://localhost:3100` (create account on first visit) |
 
-### 8. Configure your AI client
+### 9. Configure your AI client
 
 See [clients/](clients/) for configuration examples for each AI client.
 
 ## Ports
 
+### agentgateway stack
+
 | Port | Service | Protocol | Notes |
 | ---- | ------- | -------- | ----- |
-| 3847 | agentgateway MCP | HTTP | Main MCP endpoint |
-| 15001 | agentgateway Admin UI | HTTP | Playground & config |
-| 15020 | agentgateway Metrics | Prometheus | Scraped by Prometheus |
-| 3443 | nginx-proxy HTTPS | HTTPS | TLS termination |
-| 9223 | nginx-proxy CDP | CDP | Proxies to host Chrome :9222 |
-| 7030 | stdio-proxy | SSE | Bridges stdio MCPs |
-| 61822 | Kapture WebSocket | WebSocket | Chrome extension |
-| 16686 | Jaeger UI | HTTP | Trace visualization |
+| 3847 | agentgateway | HTTP | Main MCP endpoint |
+| 15001 | agentgateway | HTTP | Admin UI (playground & config) |
+| 15020 | agentgateway | Prometheus | Metrics endpoint |
+| 3443 | nginx-proxy | HTTPS | TLS-wrapped MCP + SSE |
+| 15443 | nginx-proxy | HTTPS | TLS-wrapped Admin UI |
+| 9223 | nginx-proxy | CDP | Reverse proxy → host Chrome :9222 |
+
+### mcpx stack
+
+| Port | Service | Protocol | Notes |
+| ---- | ------- | -------- | ----- |
+| 9000 | mcpx | HTTP | MCP endpoint (SSE + streamable HTTP) |
+| 5173 | mcpx | HTTP | Control Plane dashboard |
+| 9001 | mcpx | HTTP | Internal webserver |
+| 3100 | mcpx | Prometheus | Metrics (remapped from 3000) |
+| 9443 | nginx-ssl | HTTPS | TLS-wrapped MCP + SSE |
+| 5443 | nginx-ssl | HTTPS | TLS-wrapped Control Plane |
+| 9222 | nginx-ssl | CDP | Reverse proxy → host Chrome :9222 |
+| 61822 | nginx-ssl | WebSocket | Kapture WS bridge |
+| 8000 | lunar-proxy | HTTP | API gateway (not actively used) |
+| 8040 | lunar-proxy | HTTP | Health check |
+| 8081 | lunar-proxy | HTTP | Admin |
+
+### Context Lens stack
+
+| Port | Service | Protocol | Notes |
+| ---- | ------- | -------- | ----- |
+| 4040 | context-lens | HTTP | Reverse proxy (clients set `ANTHROPIC_BASE_URL`) |
+| 4041 | context-lens | HTTP | Web UI + ingest API |
+| 5175 | context-lens | HTTP | Vite dev server (dev mode only, remapped from 5173) |
+| 8080 | mitmproxy | HTTP | HTTPS forward proxy (Copilot, Codex, etc.) |
+
+### Shared MCPs & Backing Services
+
+| Port | Service | Protocol | Notes |
+| ---- | ------- | -------- | ----- |
+| 7008 | context7 | HTTP/MCP | Library documentation MCP |
+| 7020 | qdrant-mcp | HTTP | Semantic search MCP |
+| 7040 | memory | HTTP | Knowledge graph MCP (singleton) |
+| 6333 | Qdrant | HTTP | Vector DB REST API |
+| 6334 | Qdrant | gRPC | Vector DB gRPC API |
+
+### Observability & Platform (when running)
+
+| Port | Service | Protocol | Notes |
+| ---- | ------- | -------- | ----- |
+| 16686 | Jaeger | HTTP | Trace visualization UI |
 | 9090 | Prometheus | HTTP | Metrics UI & API |
 | 3000 | Grafana | HTTP | Dashboards (admin/admin) |
-| 3100 | Langfuse | HTTP | LLM observability UI |
-| 6333 | Qdrant HTTP API | HTTP | Vector DB REST API |
-| 6334 | Qdrant gRPC API | gRPC | Vector DB gRPC API |
-| 7020 | qdrant-mcp | SSE | Semantic search MCP (mcp-proxy) |
-| 9190 | Langfuse MinIO | HTTP | S3-compatible storage |
-| 4040 | Context Lens Proxy | HTTP | LLM API interception proxy |
-| 4041 | Context Lens UI | HTTP | Context composition web UI |
 | 4317/4318 | OTel Collector | gRPC/HTTP | Internal only (Docker network) |
-| 8889 | OTel Collector Metrics | Prometheus | Span metrics (internal) |
+| 8889 | OTel Collector | Prometheus | Span metrics (internal) |
+| 3100 | Langfuse | HTTP | LLM observability UI |
+| 3101 | langfuse-mcp-proxy | HTTP | MCP auth proxy for agentgateway |
+| 9190 | Langfuse MinIO | HTTP | S3-compatible object storage |
 
 ## Observability
 
@@ -440,10 +533,16 @@ git cherry-pick --no-commit origin/main..origin/fix/branch-b
 
 See [Context Lens workflow details](docs/context-lens-cherry-pick-workflow.md) for project-specific branch status and machine resume recipes.
 
+## Platform-Specific Setup
+
+- **[Windows](docs/windows-setup.md)** — WSL repo locations, cross-filesystem gotchas, SSH keys, Docker Desktop specifics
+
 ## Resources
 
 - [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro)
 - [agentgateway](https://agentgateway.dev/docs/)
 - [agentgateway Observability](https://agentgateway.dev/docs/reference/observability/metrics/)
 - [Langfuse](https://langfuse.com/docs)
+- [mcpx / Lunar.dev](https://docs.lunar.dev/mcpx/architecture)
+- [Context Lens](https://github.com/larsderidder/context-lens)
 
