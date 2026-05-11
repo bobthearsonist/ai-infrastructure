@@ -39,12 +39,19 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+    # mcp-proxy zombie-state guard: the HTTP /status endpoint returns 200 even
+    # when the inner `docker run voska/hass-mcp` subprocess has died, because
+    # mcp-proxy keeps the SSE server alive in a degraded state instead of
+    # crashing. Without the pgrep check, Docker keeps the proxy "healthy"
+    # forever and `restart: unless-stopped` never triggers. pgrep -P 1 confirms
+    # PID 1 (mcp-proxy) still has its `docker` child — when that child dies,
+    # healthcheck fails, container restarts, fresh subprocess spawns.
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:7010/status || exit 1']
-      interval: 15s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:7010/status >/dev/null && pgrep -P 1 docker >/dev/null || exit 1']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks:
       - ai-infrastructure
 
