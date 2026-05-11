@@ -1,10 +1,12 @@
 {
-  "mcpServers": {
+  "_disabledMcpServers": {
     "browser-use": {
       "url": "http://host.docker.internal:7011/sse",
       "type": "sse",
       "icon": "#2ECC71"
-    },
+    }
+  },
+  "mcpServers": {
     "hass-mcp": {
       "url": "http://host.docker.internal:7010/sse",
       "type": "sse",
