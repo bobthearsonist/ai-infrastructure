@@ -21,12 +21,12 @@ services:
   # https://docs.lunar.dev/mcpx/architecture
   # Changelog: https://github.com/TheLunarCompany/lunar/blob/main/mcpx/CHANGELOG.md
   mcpx:
-    image: us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest
+    image: us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:stable
     container_name: mcpx
     restart: unless-stopped
     privileged: true
     labels:
-      - "com.centurylinklabs.watchtower.enable=true"
+      - "com.centurylinklabs.watchtower.enable=false"
     ports:
       - "9000:9000" # MCPX API port (SSE + streamable HTTP)
       - "5173:5173" # Control Plane UI port
