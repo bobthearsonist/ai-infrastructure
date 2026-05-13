@@ -13,6 +13,11 @@ services:
       - "61822"  # Kapture WebSocket bridge
     volumes:
       - ${SERVERS_CONFIG:-./servers.json}:/config/servers.json:ro
+    env_file:
+      # Per-machine secrets for any named server that needs env (e.g. hass-mcp
+      # needs HA_URL + HA_TOKEN, propagated via --pass-environment). Optional;
+      # if the file doesn't exist, set ENV_FILE_PATH or remove this entry.
+      - .env
     environment:
       - PYTHONUNBUFFERED=1
     healthcheck:
