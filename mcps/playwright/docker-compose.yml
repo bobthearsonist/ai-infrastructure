@@ -9,8 +9,11 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     # The image already sets the entrypoint to the CLI.
-    # Just pass flags exactly like your working docker run:
-    command: ['--host=0.0.0.0', '--port=7007']
+    # `--allowed-hosts '*'` disables the playwright-mcp built-in host allowlist
+    # (which defaults to localhost only and returns HTTP 403 for any other Host
+    # header). Acceptable here because access is already scoped to the private
+    # `ai-shared` Docker network — no external exposure to lock down.
+    command: ['--host=0.0.0.0', '--port=7007', '--allowed-hosts', '*']
     ports:
       - '7007:7007' # localhost:7007/mcp
     restart: unless-stopped
