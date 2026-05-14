@@ -24,13 +24,13 @@ binds:
                   targets:
                     - name: sequential-thinking
                       sse:
-                        host: http://stdio-proxy:7030/servers/sequential-thinking/sse
+                        host: http://agentgateway-stdio-proxy:7030/servers/sequential-thinking/sse
                     - name: memory
                       sse:
                         host: http://memory_mcp:7040/servers/memory/sse
                     - name: kapture
                       sse:
-                        host: http://stdio-proxy:7030/servers/kapture/sse
+                        host: http://agentgateway-stdio-proxy:7030/servers/kapture/sse
                     # Qdrant RAG (standalone container - multi-collection)
                     - name: qdrant-work
                       sse:
@@ -55,7 +55,7 @@ binds:
                         host: http://host.docker.internal:7010/sse
                     - name: azure-devops
                       sse:
-                        host: http://stdio-proxy:7030/servers/azure-devops/sse
+                        host: http://agentgateway-stdio-proxy:7030/servers/azure-devops/sse
                     # TODO: Fix langfuse-prompts - needs langfuse stack running on :3101
                     # - name: langfuse-prompts
                     #   mcp:

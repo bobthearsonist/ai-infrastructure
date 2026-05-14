@@ -5,15 +5,24 @@ include:
 
 services:
   # Extend the included stdio-proxy to also reach ai-shared services
-  # (e.g. kapture-server). The private `default` network stays primary so
-  # `stdio-proxy` hostname resolves locally for agentgateway, avoiding the
-  # cross-stack DNS collision that commit 6e7fc82 fixed. The /local-pypi
-  # mount mirrors the standalone stdio-proxy override so psmcp (photoshop)
-  # can find its package index — `include:` doesn't pull override.yml in.
+  # (e.g. kapture-server). We give this stdio-proxy instance an explicit
+  # `agentgateway-stdio-proxy` alias on the private `default` network — DO
+  # NOT rely on the bare `stdio-proxy` service-name alias, because Docker
+  # auto-creates that alias on EVERY network the container attaches to,
+  # including ai-shared, where it collides with the mcpx- and standalone-
+  # owned stdio-proxy instances. Docker DNS does not deterministically
+  # prefer the locally-attached network, so a `stdio-proxy:7030` lookup
+  # from agentgateway can return any of the three. config.yaml uses
+  # `agentgateway-stdio-proxy:7030` to make routing unambiguous.
+  # The /local-pypi mount mirrors the standalone stdio-proxy override so
+  # psmcp (photoshop) can find its package index — `include:` doesn't pull
+  # override.yml in.
   stdio-proxy:
     networks:
-      - default
-      - ai-shared
+      default:
+        aliases:
+          - agentgateway-stdio-proxy
+      ai-shared:
     volumes:
       - ~/.local-pypi:/local-pypi:ro
 
