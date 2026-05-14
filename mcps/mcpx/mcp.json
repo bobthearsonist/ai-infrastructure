@@ -8,24 +8,24 @@
   },
   "mcpServers": {
     "hass-mcp": {
-      "url": "http://host.docker.internal:7010/sse",
+      "url": "http://mcpx-stdio-proxy:7030/servers/hass-mcp/sse",
       "type": "sse",
       "icon": "#41BDF5"
     },
     "playwright": {
-      "url": "http://host.docker.internal:7007/sse",
+      "url": "http://mcp_playwright:7007/sse",
       "type": "sse",
       "icon": "#45BA4B"
+    },
+    "photoshop": {
+      "url": "http://mcpx-stdio-proxy:7030/servers/photoshop/sse",
+      "type": "sse",
+      "icon": "#31A8FF"
     },
     "context7": {
       "url": "http://host.docker.internal:7008/mcp",
       "type": "streamable-http",
       "icon": "#8E44AD"
-    },
-    "photoshop": {
-      "url": "http://host.docker.internal:7030/servers/photoshop/sse",
-      "type": "sse",
-      "icon": "#31A8FF"
     },
     "qdrant-work": {
       "url": "http://host.docker.internal:7020/servers/qdrant-work/sse",

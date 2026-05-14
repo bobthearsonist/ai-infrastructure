@@ -12,8 +12,16 @@ services:
   # can find its package index — `include:` doesn't pull override.yml in.
   stdio-proxy:
     networks:
-      - default
-      - ai-shared
+      default:
+        # Stable alias on mcpx's private network. mcp.json uses this name —
+        # NOT the bare `stdio-proxy` service-name alias, because Compose
+        # auto-publishes that alias on EVERY attached network including
+        # ai-shared, where it collides with agentgateway's stdio-proxy.
+        # (Empirically: setting `aliases: []` on ai-shared does NOT suppress
+        # the auto-alias — Compose treats `aliases:` as additive.)
+        aliases:
+          - mcpx-stdio-proxy
+      ai-shared:
     volumes:
       - ~/.local-pypi:/local-pypi:ro
 
@@ -21,7 +29,7 @@ services:
   # https://docs.lunar.dev/mcpx/architecture
   # Changelog: https://github.com/TheLunarCompany/lunar/blob/main/mcpx/CHANGELOG.md
   mcpx:
-    image: us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:stable
+    image: us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest
     container_name: mcpx
     restart: unless-stopped
     privileged: true
