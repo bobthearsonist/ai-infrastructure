@@ -72,6 +72,7 @@ Custom (not part of agentgateway upstream). Provides HTTPS termination AND a CDP
 ## TODO
 
 - [ ] Add azure-devops MCP to stdio-proxy/servers.home.json and re-enable the target in config.yaml (commented out: stdio-proxy 404 was aborting all multiplex init)
+- [ ] Make `config.yaml` per-machine-overridable (env-var-selected mount, matching the pattern stdio-proxy and mcpx use for their configs). Tracked in root [TODO.md](../../TODO.md) under "Conventions".
 - [ ] Configure authentication (JWT/OAuth2)
 - [ ] Set up CEL-based RBAC policies
 - [ ] Configure rate limiting

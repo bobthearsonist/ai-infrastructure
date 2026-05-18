@@ -84,6 +84,7 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 
 ## TODO
 
+- [ ] Make `app.yaml` per-machine-overridable like `mcp.json` already is (env-var-selected mount). Tracked in root [TODO.md](../../TODO.md) under "Conventions" alongside the agentgateway equivalent.
 - [ ] Configure authentication (API key or OAuth)
 - [ ] Test disconnection-safe caching with OpenCode
 - [ ] Set up consumer tags for per-client metrics

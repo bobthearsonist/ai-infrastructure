@@ -26,6 +26,12 @@ Major proposed changes with detailed plan docs in `docs/`. Each plan has an expl
 
 ---
 
+## Conventions
+
+- [ ] **Extend the per-machine config-override pattern to gateway configs.** Already established for `mcps/stdio-proxy/docker-compose.yml` (`${SERVERS_CONFIG:-./servers.json}`) and `mcps/mcpx/docker-compose.yml` (`${MCP_CONFIG}`) — the active file is selected per-machine via a gitignored `.env`. Currently *not* applied to `mcps/mcpx/app.yaml` (mounted via whole-directory bind) or `gateways/agentgateway/config.yaml` (hardcoded `./config.yaml`). Pick a naming convention (`<name>.home.yaml` matches the existing `servers.home.json`, or `.<name>.local.yaml` matches Claude Code's pattern), document it once, apply to both gateways.
+
+---
+
 ## Smaller Cleanups
 
 - [ ] Remove obsolete `version: '3.9'` field from `mcps/playwright/docker-compose.yml`. Compose warns: *"the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"*. Check other compose files for the same.
