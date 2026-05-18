@@ -27,7 +27,9 @@ binds:
                         host: http://agentgateway-stdio-proxy:7030/servers/sequential-thinking/sse
                     - name: memory
                       sse:
-                        host: http://memory_mcp:7040/servers/memory/sse
+                        # Use the hyphen alias — agentgateway's strict DNS
+                        # resolver rejects underscores per RFC 1035.
+                        host: http://memory-mcp:7040/servers/memory/sse
                     - name: kapture
                       sse:
                         host: http://agentgateway-stdio-proxy:7030/servers/kapture/sse
@@ -43,7 +45,7 @@ binds:
                         host: http://qdrant-mcp:7020/servers/qdrant-code/sse
                     - name: context7
                       mcp:
-                        host: http://context7_mcp:7008/mcp
+                        host: http://context7-mcp:7008/mcp
                     - name: playwright
                       sse:
                         host: http://host.docker.internal:7007/sse
@@ -52,10 +54,15 @@ binds:
                         host: http://host.docker.internal:7011/sse
                     - name: hass-mcp
                       sse:
-                        host: http://host.docker.internal:7010/sse
-                    - name: azure-devops
-                      sse:
-                        host: http://agentgateway-stdio-proxy:7030/servers/azure-devops/sse
+                        host: http://agentgateway-stdio-proxy:7030/servers/hass-mcp/sse
+                    # TODO: azure-devops — not yet configured in stdio-proxy/servers.home.json.
+                    # Enabling this target without a matching servers.json entry makes
+                    # stdio-proxy 404 on /servers/azure-devops/sse, which aborts the
+                    # entire multiplex init for ALL targets. Add the uvx/npx invocation
+                    # for the azure-devops MCP to servers.home.json first, then uncomment.
+                    # - name: azure-devops
+                    #   sse:
+                    #     host: http://agentgateway-stdio-proxy:7030/servers/azure-devops/sse
                     # TODO: Fix langfuse-prompts - needs langfuse stack running on :3101
                     # - name: langfuse-prompts
                     #   mcp:
