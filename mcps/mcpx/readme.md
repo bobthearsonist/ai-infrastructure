@@ -34,15 +34,49 @@ Defined in [app.yaml](app.yaml):
 |-------|---------|---------|
 | core | sequential-thinking, memory | Always assigned — thinking + persistence |
 | coding | context7 | Library docs |
-| browser | kapture, playwright, browser-use | Browser automation |
-| home | hass-mcp | Home Assistant |
+| knowledge-work | qdrant-work | Work-context RAG (Obsidian notes via qdrant-mcp) |
+| knowledge-code | qdrant-code | Indexed source-code RAG |
+| knowledge-personal | qdrant-personal | Personal-context RAG |
+| devops | azure-devops | Azure DevOps work items / pipelines (when configured) |
+| diagrams | mermaid | Mermaid diagram rendering (when configured) |
+| homelab | hass-mcp | Home Assistant |
+| browser | kapture, playwright | Browser automation |
 | creative | photoshop | Adobe Photoshop |
+
+### How a tool actually reaches a client
+
+mcpx 0.4.x gates tool visibility through TWO layers — both must pass:
+
+1. **mcp.json** lists every backend mcpx connects to. Anything not here isn't talked to.
+2. **app.yaml** controls what mcpx *exposes*. A backend is only surfaced if:
+   - It appears in a `toolGroups` entry, AND
+   - That group name is in the active consumer's `permissions.consumers.<name>.allow` list (or `permissions.default.allow` for unknown consumers).
+
+If either condition fails, mcpx **silently drops** the backend from `tools/list` — no error, no warning at INFO log level. Backends will still log `Client connected` and appear in `count=N`. Easy to miss.
+
+When adding a new backend: add it to mcp.json, then add it to a `toolGroups` entry, then add that group to every consumer's `allow` that needs to see it.
+
+### Diagnosing a missing backend
+
+If tools don't appear in a client even though the backend looks connected:
+
+```bash
+# Bump log verbosity, restart, then look for the loaded-config dump
+docker compose exec mcpx sh -c 'echo "set LOG_LEVEL=debug in compose env, restart"'
+docker logs mcpx --since 1m 2>&1 | grep -A1 "Config loaded successfully"
+```
+
+The dump shows the exact `permissions` and `toolGroups` mcpx parsed. Cross-reference with the consumer name to see why your backend isn't surfacing.
+
+This was a major behavior change between mcpx 0.2.x (`:stable`) and 0.4.x (`:latest`); the older version surfaced everything in mcp.json. Saved as memory `reference_mcpx_permissions_gate`.
 
 ## Prerequisites
 
-- SSE-based MCPs (playwright, browser-use, hass-mcp, context7) must be running on the host
-- stdio-proxy must be running on port 7030 for photoshop
+- SSE/HTTP-based MCPs (playwright, hass-mcp via stdio-proxy, context7, qdrant-mcp) must be running and reachable
+- stdio-proxy must be running on port 7030 for photoshop, hass-mcp, and kapture (mcpx-stdio-proxy alias on the private network)
 - SSL certs in `./certs/tls/` for HTTPS (optional)
+
+Note: `browser-use` is currently moved to `_disabledMcpServers` in mcp.json — re-enable it there before expecting it to connect.
 
 ## Usage
 
