@@ -1,312 +1,86 @@
 # agentgateway
 
-agentgateway is an open-source MCP gateway/proxy from the Linux Foundation. It serves as a central entrypoint for multiple MCP servers, routing requests to appropriate backends.
+Open-source MCP gateway from the Linux Foundation. Federates multiple MCP backends behind one endpoint via a multiplexed `mcp:` route in `config.yaml`.
 
-- 📖 **Docs**: <https://agentgateway.dev/docs/>
-- 🔗 **GitHub**: <https://github.com/agentgateway/agentgateway>
-- 🏗️ **Architecture**: See [root README](../../README.md)
+📖 [Docs](https://agentgateway.dev/docs/) · 🔗 [GitHub](https://github.com/agentgateway/agentgateway) · [Multiplexing](https://agentgateway.dev/docs/mcp/connect/multiplex/)
 
-## Current Status
+## Status
 
-✅ **Working** - Serving 24+ tools from 3 MCP backends.
+Image: `ghcr.io/agentgateway/agentgateway:latest` (watchtower-enabled). Lazy initialization — backends only connect on first MCP client request. Tool names are prefixed with the target name (e.g., `context7_resolve-library-id`).
 
-## Ports
+## Endpoints
 
-| Port  | Protocol   | Description              |
-| ----- | ---------- | ------------------------ |
-| 3847  | HTTP       | MCP endpoint             |
-| 15001 | HTTP       | Admin UI Dashboard       |
-| 15020 | Prometheus | Metrics endpoint         |
-| 3443  | HTTPS      | MCP endpoint (via nginx) |
+| Use                  | HTTP                       | HTTPS                  |
+| -------------------- | -------------------------- | ---------------------- |
+| MCP                  | `localhost:3847/mcp`       | `localhost:3443/mcp`   |
+| Admin UI             | `localhost:15001/ui`       | `localhost:15443`      |
+| Metrics (Prometheus) | `localhost:15020`          | —                      |
+| CDP proxy            | containers → host:9222     | `localhost:9223`       |
 
-## Configured Backends
+## Backends (config.yaml)
 
-| MCP Server          | Status     | Transport       | Source                                          | Docs                                          |
-| ------------------- | ---------- | --------------- | ----------------------------------------------- | --------------------------------------------- |
-| sequential-thinking | ✅ Running | SSE             | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/sequential-thinking/readme.md) |
-| memory              | ✅ Running | SSE             | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/memory/readme.md)              |
-| kapture             | ✅ Running | SSE + WebSocket | [stdio-proxy](../../mcps/stdio-proxy/readme.md) | [→](../../mcps/kapture/readme.md)             |
-| context7            | ✅ Running | SSE             | container                                       | [→](../../mcps/context7/readme.md)            |
-| playwright          | ✅ Running | SSE             | container                                       | [→](../../mcps/playwright/readme.md)          |
-| browser-use         | ✅ Running | SSE             | container                                       | [→](../../mcps/browser-use/readme.md)         |
-| hass-mcp            | ✅ Running | SSE             | container                                       | [→](../../mcps/hass-mcp/readme.md)            |
-| langfuse-prompts    | ✅ Running | MCP             | container                                       | [→](../../platform/langfuse/README.md)        |
+All targets live inside one `backends[0].mcp.targets` array (single block — see operational notes).
 
-## Setup
-
-### Prerequisites
-
-1. Create the shared Docker network (optional - mcpx creates it automatically):
-
-   ```bash
-   docker network create ai-shared
-   ```
-
-2. Start mcpx or ensure the ai-shared network exists (stdio-proxy runs within each gateway stack):
-
-   ```bash
-   cd ../../mcps/stdio-proxy
-   docker-compose up -d
-   ```
-
-### Run
-
-```bash
-docker-compose up -d
-```
-
-### Access
-
-- **Admin UI**: `http://localhost:15001/ui`
-- **MCP Endpoint**: `http://localhost:3847/mcp`
+| Target                      | Transport       | URL                                                                |
+| --------------------------- | --------------- | ------------------------------------------------------------------ |
+| sequential-thinking         | SSE             | `agentgateway-stdio-proxy:7030/servers/sequential-thinking/sse`    |
+| kapture                     | SSE             | `agentgateway-stdio-proxy:7030/servers/kapture/sse`                |
+| azure-devops                | SSE             | `agentgateway-stdio-proxy:7030/servers/azure-devops/sse`           |
+| memory                      | SSE             | `memory_mcp:7040/servers/memory/sse`                               |
+| qdrant-{work,personal,code} | SSE             | `qdrant-mcp:7020/servers/qdrant-*/sse`                             |
+| context7                    | streamable-http | `context7_mcp:7008/mcp`                                            |
+| playwright                  | SSE             | `host.docker.internal:7007/sse`                                    |
+| hass-mcp                    | SSE             | `host.docker.internal:7010/sse` ⚠️ stale — see operational notes    |
+| browser-use                 | SSE (disabled)  | `host.docker.internal:7011/sse`                                    |
 
 ## Configuration
 
-### config.yaml
+| File                 | Purpose                                                                  |
+| -------------------- | ------------------------------------------------------------------------ |
+| `config.yaml`        | Listeners, backends (single `mcp:` block), routes. xDS-hot-reloadable in theory. |
+| `docker-compose.yml` | Orchestration. `include:`s `mcps/stdio-proxy/docker-compose.yml`.        |
+| `nginx.conf`         | HTTPS termination + CDP proxy (9223 → host:9222) for playwright/browser-use. |
+| `memory.json`        | Persistent store for the `memory` MCP backend.                           |
+| `certs/`             | TLS certs for the nginx sidecar (optional).                              |
 
-The `config.yaml` file defines which MCP backends to connect to:
+## Operational notes
 
-```yaml
-version: v1
-listeners:
-  - name: mcp-listener
-    protocol: MCP
-    address: 0.0.0.0:3847
+- **One `- mcp:` block. Always.** All MCP targets go in `backends[0].mcp.targets`. Adding a second `- mcp:` block **replaces** — only the last block's tools surface. The `backends` array is for distinct protocol classes (MCP / A2A / OpenAPI), not for separating MCP targets. (Source: `router.rs` — `McpBackendGroup` has a single `targets: Vec<...>`.)
+- **`statefulMode: stateless` is required on the mcp block** when targets use SSE. SSE connections are short-lived HTTP GETs; closing the connection destroys the upstream session. Stateless mode auto-wraps every request with a fresh `initialize`. Without it, follow-up requests fail with *"Received request before initialization was complete."*
+- **`resources/list` returns HTTP 500 in multiplexing mode** (any setup with >1 target). Expected, not a bug — URL mapping for resources across multiplexed targets isn't implemented. Tracking [agentgateway#404](https://github.com/agentgateway/agentgateway/issues/404). Tool discovery is unaffected.
+- **`prompts/list` 500s are noise.** Some upstreams don't implement prompts. Ignore.
+- **Three hostname patterns** in config.yaml URLs:
+  - `agentgateway-stdio-proxy:7030/servers/<name>/sse` — for stdio MCPs through the proxy (deliberate alias; the bare `stdio-proxy` alias collides on ai-shared; see memory note `reference_mcp_router_architecture`)
+  - `<container>:<port>` — for native sibling services on ai-shared (`qdrant-mcp`, `memory_mcp`, `context7_mcp`)
+  - `host.docker.internal:<port>` — for services that only publish to the host (e.g., `playwright` at 7007)
+- **hass-mcp URL is stale.** The migration of hass-mcp from a direct container to `uvx hass-mcp` inside stdio-proxy hasn't been mirrored here. Fix is one URL swap to `agentgateway-stdio-proxy:7030/servers/hass-mcp/sse` (currently in TODO).
+- **playwright needs `--allowed-hosts '*'`** on the playwright container (set in `mcps/playwright/docker-compose.yml`). Without it the server returns 403 to non-localhost Host headers.
 
-backends:
-  mcp:
-    targets:
-      - name: sequential-thinking
-        sse:
-          host: http://host.docker.internal:7030/servers/sequential-thinking/sse
-      - name: memory
-        sse:
-          host: http://host.docker.internal:7030/servers/memory/sse
-```
+## Adding a backend
 
-### Adding a New Backend
+1. Confirm reachability from inside the gateway container (use the appropriate hostname pattern above).
+2. Add a single `- name: ... sse: host: ...` (or `mcp: host: ...` for streamable-http) entry to `backends[0].mcp.targets` in `config.yaml`. **Don't create a new `- mcp:` block.**
+3. `docker compose restart agentgateway`.
 
-1. **SSE-based MCP** - Add directly to `config.yaml`:
+## nginx-proxy sidecar
 
-   ```yaml
-   - name: new-mcp
-     sse:
-       host: http://host.docker.internal:PORT/sse
-   ```
+Custom (not part of agentgateway upstream). Provides HTTPS termination AND a CDP forwarder mapping `host.docker.internal:9223` → host's Chrome on `:9222`, letting containerized playwright/browser-use drive host Chrome.
 
-2. **stdio-based MCP** - Add to [stdio-proxy](../../mcps/stdio-proxy/readme.md) first, then reference it here.
-
-3. **Restart**:
-
-   ```bash
-   docker-compose restart agentgateway
-   ```
-
-### MCP Backend Architecture (Important!)
-
-⚠️ **All MCP targets must be in a single `- mcp:` backend block.** This is by design.
-
-**Why?** From the agentgateway source code (`router.rs`):
-
-```rust
-pub struct McpBackendGroup {
-    pub targets: Vec<Arc<McpTarget>>,  // Vector of targets in ONE group
-    pub stateful: bool,                 // Single stateful mode for whole group
-}
-```
-
-**Design rationale:**
-
-1. **Multiplexing Pattern**: agentgateway federates tools from multiple MCP servers into a unified interface. The `backends` array at route level is for **different protocol types** (MCP/A2A/OpenAPI), not for separating MCP targets.
-
-2. **Stateful Mode Scope**: `statefulMode` applies to the entire backend group - session management must be consistent across all targets.
-
-3. **Tool Namespace**: If you use multiple `- mcp:` blocks, only the last one's tools will be returned. The gateway merges multiple **targets** within a single MCP backend, not multiple MCP backend groups.
-
-**Correct configuration:**
-
-```yaml
-backends:
-  - mcp:
-      statefulMode: stateless
-      targets:
-        - name: server-a
-          sse:
-            host: http://host.docker.internal:7001/sse
-        - name: server-b
-          sse:
-            host: http://host.docker.internal:7002/sse
-        - name: server-c
-          mcp:
-            host: http://host.docker.internal:7003/mcp
-```
-
-**Incorrect configuration (only server-c tools returned):**
-
-```yaml
-backends:
-  - mcp:
-      targets:
-        - name: server-a
-          sse:
-            host: http://host.docker.internal:7001/sse
-  - mcp: # ❌ Second mcp block overwrites first!
-      targets:
-        - name: server-c
-          mcp:
-            host: http://host.docker.internal:7003/mcp
-```
-
-See [MCP Multiplexing documentation](https://agentgateway.dev/docs/mcp/connect/multiplex/) for more details.
-
-### SSE Endpoints Require Stateless Mode
-
-⚠️ **Always use `statefulMode: stateless` when connecting to SSE-based MCP servers.**
-
-**The Problem**: SSE (Server-Sent Events) connections have a lifecycle mismatch with MCP session semantics.
-
-1. **SSE Connection Lifecycle**: An SSE connection is a long-lived HTTP GET request. When agentgateway closes the connection after receiving a response, the SSE session on the server is destroyed.
-
-2. **MCP Session Semantics**: MCP expects sessions to persist across multiple requests. After `initialize`, subsequent calls like `tools/list` should reuse the same session.
-
-3. **The Mismatch**:
-   - agentgateway opens SSE connection, sends `initialize`, gets response
-   - SSE connection closes (HTTP disconnect)
-   - Server destroys the session
-   - Later, `tools/list` arrives with the same session ID
-   - Server rejects: "Received request before initialization was complete"
-
-**The Solution**: `statefulMode: stateless` tells agentgateway to automatically wrap every request with a fresh `initialize` call, treating each request as an independent transaction.
-
-```yaml
-backends:
-  - mcp:
-      statefulMode: stateless  # Required for SSE targets
-      targets:
-        - name: sequential-thinking
-          sse:
-            host: http://host.docker.internal:7030/servers/sequential-thinking/sse
-```
-
-**Note**: This applies to SSE (`sse:`) transport. Streamable HTTP (`mcp:`) transport handles sessions differently and may work in stateful mode, but using stateless mode for mixed SSE/MCP backends is safe.
-
-### DNS Notes
-
-Use `host.docker.internal:PORT` for backend URLs. Container-to-container DNS doesn't work reliably with agentgateway's Go resolver.
-
-## Features
-
-agentgateway provides enterprise features not available in simpler gateways:
-
-| Feature            | Description                  |
-| ------------------ | ---------------------------- |
-| **Authentication** | JWT, OAuth2 support          |
-| **Authorization**  | CEL-based RBAC policies      |
-| **Rate Limiting**  | Per-client rate limits       |
-| **Native TLS**     | Built-in SSL/TLS             |
-| **OpenAPI → MCP**  | Convert OpenAPI specs to MCP |
-| **A2A Protocol**   | Agent-to-agent communication |
-| **Hot Reload**     | Config updates via xDS       |
-
-## Comparison to MCPX
-
-| Feature            | MCPX | agentgateway |
-| ------------------ | ---- | ------------ |
-| MCP Gateway        | ✅   | ✅           |
-| Authentication     | ❌   | ✅           |
-| Authorization/RBAC | ❌   | ✅           |
-| Native TLS         | ❌   | ✅           |
-| Rate Limiting      | ❌   | ✅           |
-| Hot Reload         | ❌   | ✅           |
-
-## Docker Compose
-
-This setup runs two containers:
-
-| Container    | Image                               | Purpose                        |
-| ------------ | ----------------------------------- | ------------------------------ |
-| agentgateway | `ghcr.io/agentgateway/agentgateway` | MCP gateway (Linux Foundation) |
-| nginx-proxy  | `nginx:alpine`                      | SSL termination, CDP proxy     |
-
-### nginx-proxy
-
-The nginx-proxy is our custom addition (not part of agentgateway) that provides:
-
-| Port  | Purpose            | Direction                     |
-| ----- | ------------------ | ----------------------------- |
-| 3443  | HTTPS MCP endpoint | Clients → agentgateway        |
-| 15443 | HTTPS Admin UI     | Browser → agentgateway        |
-| 9223  | CDP proxy          | Containers → host Chrome:9222 |
-
-**Why CDP proxy?** Playwright and browser-use MCPs run inside Docker containers but need to control Chrome running on the host. Containers can't reach `localhost:9222` directly, so nginx proxies `host.docker.internal:9223` → `host:9222`.
-
-> **Note:** Kapture doesn't use this proxy. The Chrome extension (running on host) connects directly to stdio-proxy:61822. The connection direction is reversed - host→container instead of container→host.
-
-## Troubleshooting
-
-### DNS Resolution Failed
-
-If you see "backends required DNS resolution which failed":
-
-1. Use `host.docker.internal:PORT` for backend URLs
-2. Ensure docker-compose.yml has `dns: - 127.0.0.11`
-
-### prompts/list 500 Error
-
-Expected - some MCP backends don't implement prompts. Doesn't affect tool discovery.
-
-### resources/list 500 Error (Multiplexing Limitation)
-
-When using **more than one MCP target** (multiplexing mode), `resources/list` and `resources/templates/list` return HTTP 500 errors. **This is expected behavior**, not a bug.
-
-**What triggers multiplexing**: Having `backend.targets.len() > 1`. From the source (`handler.rs`):
-
-```rust
-let default_target_name = if backend.targets.len() != 1 {
-    is_multiplexing = true;  // More than 1 target = multiplexing
-    None
-} else {
-    Some(backend.targets[0].name.to_string())  // Single target = no multiplexing
-};
-```
-
-With our current 8 targets (sequential-thinking, memory, kapture, etc.), we're in multiplexing mode.
-
-**Why it happens**: agentgateway hasn't implemented URL mapping for resources in multiplexing mode. From `session.rs`:
-
-```rust
-ClientRequest::ListResourcesRequest(_) => {
-    if !self.relay.is_multiplexing() {
-        // Works with single target
-    } else {
-        // TODO(https://github.com/agentgateway/agentgateway/issues/404)
-        Err(UpstreamError::InvalidMethodWithMultiplexing(...))
-    }
-}
-```
-
-**Why tools work but resources don't**:
-
-- `tools/list` - Tool names get prefixed with target name (e.g., `context7_resolve-library-id`)
-- `resources/list` - Would need URL rewriting/mapping which isn't implemented yet
-
-**Resolution options**:
-
-1. **Accept the limitation** - If you don't need MCP resources, ignore the 500s. Tool discovery works fine.
-2. **Use single target** - Resources work with only one MCP target configured.
-3. **Track upstream** - [agentgateway/agentgateway#404](https://github.com/agentgateway/agentgateway/issues/404)
+> Kapture is the reverse direction — the Chrome extension on the host opens a WebSocket to the kapture-mcp container directly (port 61822). No nginx hop.
 
 ## TODO
 
+- [ ] Migrate hass-mcp target URL to `agentgateway-stdio-proxy:7030/servers/hass-mcp/sse` (same uvx-via-proxy pattern as mcpx)
 - [ ] Configure authentication (JWT/OAuth2)
-- [ ] Set up RBAC policies
+- [ ] Set up CEL-based RBAC policies
 - [ ] Configure rate limiting
 - [ ] Set up xDS for hot-reload
-- [ ] Restrict sequential-thinking MCP to local models only (hosted models/agents like Cline and GitHub Copilot provide similar chain-of-thought functionality in the client)
-- [ ] reference the project plan https://github.com/orgs/agentgateway/projects/1/views/1
+- [ ] Restrict sequential-thinking MCP to local models only (hosted clients like Cline/Copilot have native chain-of-thought)
+- [ ] Track upstream roadmap: <https://github.com/orgs/agentgateway/projects/1/views/1>
 
-## Related
+## See also
 
-- [Client Configuration](../../clients/) - Configure AI clients to connect
-- [stdio-proxy](../../mcps/stdio-proxy/readme.md) - stdio→SSE bridge for MCPs
-- [Langfuse](../../platform/langfuse/README.md) - LLM observability platform
+- [MCPX](../../mcps/mcpx/readme.md) — sibling MCP gateway (Lunar.dev; simpler but with its own `app.yaml` permissions gate)
+- [stdio-proxy](../../mcps/stdio-proxy/readme.md) — stdio→SSE bridge for uvx/npx MCPs
+- [Langfuse](../../platform/langfuse/README.md) — LLM observability
+- [Client config](../../clients/) — how AI clients connect to the gateways
