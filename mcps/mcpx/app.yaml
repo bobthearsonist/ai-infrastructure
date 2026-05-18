@@ -6,19 +6,27 @@ permissions:
       - coding
       - knowledge-work
       - knowledge-code
+      - knowledge-personal
       - devops
       - diagrams
+      - homelab
+      - browser
+      - creative
   consumers:
     claude-code:
       _type: default-block
-      consumerGroupKey: claude-code (via mcp-remote 0.1.21) Profile
+      consumerGroupKey: claude-code Profile
       allow:
         - core
         - coding
         - knowledge-work
         - knowledge-code
-        - diagrams
+        - knowledge-personal
         - devops
+        - diagrams
+        - homelab
+        - browser
+        - creative
     claude-desktop:
       _type: default-block
       consumerGroupKey: claude-desktop
@@ -27,8 +35,12 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
     vscode-copilot:
       _type: default-block
       consumerGroupKey: vscode-copilot
@@ -37,8 +49,12 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
     vscode-insiders-copilot:
       _type: default-block
       consumerGroupKey: vscode-insiders-copilot
@@ -47,8 +63,12 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
     opencode:
       _type: default-block
       consumerGroupKey: opencode
@@ -57,8 +77,12 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
     cline:
       _type: default-block
       consumerGroupKey: cline
@@ -67,8 +91,12 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
     cline-standalone:
       _type: default-block
       consumerGroupKey: cline-standalone
@@ -77,8 +105,12 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
     kilocode:
       _type: default-block
       consumerGroupKey: kilocode
@@ -87,8 +119,12 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
     goose:
       _type: default-block
       consumerGroupKey: goose
@@ -97,8 +133,13 @@ permissions:
         - coding
         - knowledge-work
         - knowledge-code
+        - knowledge-personal
         - devops
         - diagrams
+        - homelab
+        - browser
+        - creative
+  clientNames: {}
 toolGroups:
   - name: core
     services:
@@ -119,6 +160,31 @@ toolGroups:
   - name: diagrams
     services:
       mermaid: "*"
+  - name: homelab
+    services:
+      hass-mcp:
+        - get_version
+        - get_entity
+        - entity_action
+        - list_entities
+        - search_entities_tool
+        - domain_summary_tool
+        - system_overview
+        - list_automations
+        - restart_ha
+        - call_service_tool
+        - get_history
+        - get_error_log
+  - name: browser
+    services:
+      playwright: "*"
+      kapture: "*"
+  - name: creative
+    services:
+      photoshop: "*"
+  - name: knowledge-personal
+    services:
+      qdrant-personal: "*"
 auth:
   enabled: false
 toolExtensions:
