@@ -48,11 +48,16 @@ package "mcpx stack (private + ai-shared)" as mcpx_stack #E8F5E9 {
 ' === Shared MCPs (ai-shared network) ===
 package "Shared MCPs (ai-shared)" as shared_mcps #FFF3E0 {
   [context7\n:7008] as context7 #FFCC80
-  [qdrant-mcp\n:7020] as qdrant_mcp #FFCC80
+  [qdrant-mcp\n:7020\n+ obsidian-watcher\n+ repo-watcher-<scope>] as qdrant_mcp #FFCC80
   [memory\n:7040 (singleton)] as memory #FFCC80
   [playwright\n:7007] as playwright #FFE0B2
   [browser-use\n:7011] as browser_use #FFE0B2
   [hass-mcp\n:7010] as hass_mcp #FFE0B2
+}
+
+' === Host-side Code Tools (NOT containers — installed on host) ===
+package "Host-side Code Tools" as host_tools #FFFDE7 {
+  component "**graphify**\nCLI + MCP + Claude skill\nstructural code graph\n(Tree-sitter AST)" as graphify #FFF59D
 }
 
 ' === Backing Services ===
@@ -97,6 +102,9 @@ mcpx --> context7 : SSE (ai-shared)
 mcpx --> qdrant_mcp : SSE
 mcpx --> memory : SSE
 
+' Host-side tools (stdio MCP — connects directly to client, not through gateway)
+claude_code ..> graphify : stdio MCP\n(installed as Claude skill)
+
 ' Backing
 qdrant_mcp --> qdrant : :6333
 
@@ -116,6 +124,7 @@ legend right
   | <#81C784> | stdio-proxy (per-stack) |
   | <#FFCC80> | Shared MCP (running) |
   | <#FFE0B2> | Shared MCP (available) |
+  | <#FFF59D> | Host-side tool (not containerized) |
   | <#CE93D8> | Backing Service |
   | <#81D4FA> | Observability |
   | <#E0E0E0> | Inactive |
@@ -260,7 +269,7 @@ Standalone MCPs run as their own containers on `ai-shared`. stdio MCPs run insid
 | MCP | Type | Description | Status | Docs |
 | --- | ---- | ----------- | ------ | ---- |
 | [context7](mcps/context7/readme.md) | Standalone | Library documentation lookup | ✅ Running | [→](mcps/context7/readme.md) |
-| [qdrant-mcp](mcps/qdrant-mcp/README.md) | Standalone | Semantic search (work notes, code, personal) | ✅ Running | [→](mcps/qdrant-mcp/README.md) |
+| [qdrant-mcp](mcps/qdrant-mcp/README.md) | Standalone | Vector RAG — multi-collection routing (notes, code, etc. by scope). Includes watcher sidecars for auto-reindex. | ✅ Running | [→](mcps/qdrant-mcp/README.md) |
 | [memory](mcps/memory/readme.md) | Standalone | Knowledge graph (singleton shared by both gateways) | ✅ Running | [→](mcps/memory/readme.md) |
 | [sequential-thinking](mcps/sequential-thinking/readme.md) | stdio | Chain of thought reasoning | ✅ Running | [→](mcps/sequential-thinking/readme.md) |
 | [kapture](mcps/kapture/readme.md) | stdio | Chrome extension bridge | ✅ Running | [→](mcps/kapture/readme.md) |
@@ -287,6 +296,14 @@ See [clients/readme.md](clients/readme.md) for configuration.
 | VS Code Copilot | [copilot/](clients/copilot/) |
 | Claude Desktop | [claude/](clients/claude/) |
 | Cline | [cline/](clients/cline/) |
+
+### Host-side Code Tools
+
+These are NOT part of the Compose stack — they install on the host directly (CLI + Claude Code skill) but complement the in-stack services:
+
+| Tool | Type | Role | Status |
+| ---- | ---- | ---- | ------ |
+| [graphify](https://github.com/safishamsi/graphify) | CLI + MCP + Claude skill | Structural code-graph (Tree-sitter AST → call/dep graph, community detection). Complements qdrant code collections — structural queries vs semantic similarity. Installs git `post-commit` + `post-checkout` hooks per repo for auto-rebuild. | ✅ Available via `uv tool install graphifyy` |
 
 ## Quick Start
 
@@ -317,10 +334,26 @@ docker compose up -d
 
 ```bash
 cd mcps/qdrant-mcp
-docker compose up -d
+# Set vault + repos paths from local config (used by watcher sidecars)
+export VAULT_PATH="$(yq '.obsidian.vault_path' ~/ai/local.yaml)"
+export REPOS_BASE="$(yq '.repos.base_path' ~/ai/local.yaml)"
+docker compose up -d --build
 ```
 
-### 5. Start Context Lens (LLM traffic analysis)
+Brings up: `qdrant` (vector DB) + `qdrant-mcp` (MCP proxy) + watcher sidecars (`obsidian-watcher`, optional `repo-watcher-*` per scope) for auto-reindex. See [qdrant-mcp README](mcps/qdrant-mcp/README.md) for multi-collection routing and watcher configuration.
+
+### 5. (Optional) Install graphify for structural code queries
+
+```bash
+uv tool install graphifyy
+graphify install                  # Register as a Claude Code skill / MCP
+graphify <path> --no-viz --directed   # Build an initial graph from any repo or workspace
+graphify hook install             # Inside each repo: auto-rebuild on commit
+```
+
+Complements qdrant code collections — see [graphify](https://github.com/safishamsi/graphify) for the full CLI surface.
+
+### 6. Start Context Lens (LLM traffic analysis)
 
 ```bash
 cd platform/context-lens
@@ -329,21 +362,21 @@ docker compose up -d
 
 Then set `ANTHROPIC_BASE_URL=http://127.0.0.1:4040/claude` in your shell profile or VS Code settings. See [Context Lens README](platform/context-lens/README.md#client-configuration) for per-client setup.
 
-### 6. Start observability stack (optional)
+### 7. Start observability stack (optional)
 
 ```bash
 cd platform/observability
 docker compose up -d
 ```
 
-### 7. Start Langfuse (optional)
+### 8. Start Langfuse (optional)
 
 ```bash
 cd platform/langfuse
 docker compose up -d
 ```
 
-### 8. Access
+### 9. Access
 
 | Service | URL |
 | ------- | --- |
@@ -355,7 +388,7 @@ docker compose up -d
 | Grafana | `http://localhost:3000` (admin/admin) |
 | Langfuse | `http://localhost:3100` (create account on first visit) |
 
-### 9. Configure your AI client
+### 10. Configure your AI client
 
 See [clients/](clients/) for configuration examples for each AI client.
 

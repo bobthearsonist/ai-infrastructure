@@ -16,10 +16,12 @@ skinparam packageStyle frame
 skinparam nodesep 40
 skinparam ranksep 30
 
-' -- Color palette --
+' -- Color palette: scope-based (work / public) + neutral for shared infra --
 skinparam package {
   BackgroundColor<<source>> #F0F7FF
   BorderColor<<source>> #4A90D9
+  BackgroundColor<<watch>> #FFF3E0
+  BorderColor<<watch>> #E65100
   BackgroundColor<<indexing>> #FFF8E1
   BorderColor<<indexing>> #F9A825
   BackgroundColor<<infra>> #F3E5F5
@@ -31,59 +33,83 @@ skinparam package {
 skinparam rectangle {
   BackgroundColor<<work>> #BBDEFB
   BorderColor<<work>> #1565C0
-  BackgroundColor<<personal>> #C8E6C9
-  BorderColor<<personal>> #2E7D32
-  BackgroundColor<<code>> #FFF9C4
-  BorderColor<<code>> #F9A825
+  BackgroundColor<<public>> #C8E6C9
+  BorderColor<<public>> #2E7D32
+  BackgroundColor<<future>> #F5F5F5
+  BorderColor<<future>> #9E9E9E
 }
 
 skinparam storage {
   BackgroundColor<<work>> #BBDEFB
   BorderColor<<work>> #1565C0
-  BackgroundColor<<personal>> #C8E6C9
-  BorderColor<<personal>> #2E7D32
-  BackgroundColor<<code>> #FFF9C4
-  BorderColor<<code>> #F9A825
+  BackgroundColor<<public>> #C8E6C9
+  BorderColor<<public>> #2E7D32
+  BackgroundColor<<future>> #F5F5F5
+  BorderColor<<future>> #9E9E9E
+}
+
+skinparam component {
+  BackgroundColor<<work>> #BBDEFB
+  BorderColor<<work>> #1565C0
+  BackgroundColor<<public>> #C8E6C9
+  BorderColor<<public>> #2E7D32
+  BackgroundColor<<neutral>> #FFF9C4
+  BorderColor<<neutral>> #F9A825
 }
 
 ' ══════════════════════════════════════
-' LAYER 1: DATA SOURCES
+' LAYER 1: DATA SOURCES (filesystem mounts)
 ' ══════════════════════════════════════
-package "Data Sources" <<source>> {
-  rectangle "Obsidian: 0 Profisee/" <<work>> as profisee
-  rectangle "Obsidian: Personal folders" <<personal>> as personal_files
-  rectangle "Git Repositories" <<code>> as repos
-  profisee -[hidden]right- personal_files
-  personal_files -[hidden]right- repos
+package "Data Sources (bind mounts)" <<source>> {
+  rectangle "Obsidian vault\n(work folders)" <<work>> as vault_work
+  rectangle "Obsidian vault\n(personal folders)" <<future>> as vault_public
+  rectangle "Git repos\n(work scope)" <<work>> as repos_work
+  rectangle "Git repos\n(public scope)" <<public>> as repos_public
+  vault_work -[hidden]right- vault_public
+  vault_public -[hidden]right- repos_work
+  repos_work -[hidden]right- repos_public
 }
 
 ' ══════════════════════════════════════
-' LAYER 2: INDEXING + STORAGE
+' LAYER 2: WATCHER SIDECARS (auto-reindex on change)
 ' ══════════════════════════════════════
-package "Indexing + Storage" <<indexing>> {
-  component "**index_obsidian.py**\nchunking + FastEmbed\nall-MiniLM-L6-v2 (384d)" as indexer
-  component "**index_repos.py**\ncode-aware chunking" as repo_indexer
-  storage "work" <<work>> as work_col
-  storage "personal" <<personal>> as personal_col
-  storage "code" <<code>> as code_col
+package "Watcher Sidecars" <<watch>> {
+  component "**obsidian-watcher**\n(CPU image)\nPollingObserver\n→ index_obsidian.py" <<work>> as w_obs
+  component "**repo-watcher-work**\n(GPU image)\nPollingObserver\n→ index_repos.py" <<work>> as w_repo_work
+  component "**repo-watcher-public**\n(GPU image)\nPollingObserver\n→ index_repos.py" <<public>> as w_repo_public
+  w_obs -[hidden]right- w_repo_work
+  w_repo_work -[hidden]right- w_repo_public
+}
+
+' ══════════════════════════════════════
+' LAYER 3: INDEXERS + COLLECTIONS
+' ══════════════════════════════════════
+package "Indexing + Storage (Qdrant collections)" <<indexing>> {
+  component "**index_obsidian.py**\nmarkdown chunking\nFastEmbed all-MiniLM-L6-v2 (384d)\nmulti-collection routing" <<neutral>> as indexer
+  component "**index_repos.py**\ncode-aware chunking\nqdrant_collection from yaml" <<neutral>> as repo_indexer
+  storage "notes-work" <<work>> as notes_work
+  storage "notes-public" <<future>> as notes_public
+  storage "code-work" <<work>> as code_work
+  storage "code-public" <<public>> as code_public
   indexer -[hidden]right- repo_indexer
 }
 
 ' ══════════════════════════════════════
-' LAYER 3: MCP INFRASTRUCTURE
+' LAYER 4: MCP INFRASTRUCTURE
 ' ══════════════════════════════════════
 package "qdrant-mcp container :7020" <<infra>> {
-  component "**mcp-proxy**\nSSE multiplexer" as proxy
-  rectangle "qdrant-work" <<work>> as work_sse
-  rectangle "qdrant-personal" <<personal>> as personal_sse
-  rectangle "qdrant-code" <<code>> as code_sse
-  proxy -[hidden]down- work_sse
+  component "**mcp-proxy**\nSSE multiplexer\n(one endpoint per collection)" as proxy
+  rectangle "qdrant-notes-work" <<work>> as sse_nw
+  rectangle "qdrant-notes-public" <<future>> as sse_np
+  rectangle "qdrant-code-work" <<work>> as sse_cw
+  rectangle "qdrant-code-public" <<public>> as sse_cp
+  proxy -[hidden]down- sse_nw
 }
 
 ' ══════════════════════════════════════
-' LAYER 4: AI CLIENTS
+' LAYER 5: AI CLIENTS
 ' ══════════════════════════════════════
-package "AI Clients" <<clients>> {
+package "AI Clients (via gateway or direct SSE)" <<clients>> {
   actor "VS Code\nCopilot" as copilot
   actor "Claude\nDesktop" as claude_desktop
   actor "Claude\nCode" as claude_code
@@ -99,22 +125,30 @@ package "AI Clients" <<clients>> {
 ' CONNECTIONS
 ' ══════════════════════════════════════
 
-' Layer 1 → Layer 2
-profisee -[#1565C0]down-> indexer
-personal_files -[#2E7D32]down-> indexer
-repos -[#F9A825]down-> repo_indexer
+' Layer 1 → Layer 2 (watchers observe sources)
+vault_work -[#1565C0]down-> w_obs
+vault_public -[#9E9E9E,dashed]down-> w_obs : (future)
+repos_work -[#1565C0]down-> w_repo_work
+repos_public -[#2E7D32]down-> w_repo_public
 
-' Indexers → Storage
-indexer -[#1565C0]down-> work_col
-indexer -[#2E7D32]down-> personal_col
-repo_indexer -[#F9A825]down-> code_col
+' Layer 2 → Layer 3 (watchers invoke indexers as subprocess)
+w_obs -[#1565C0]down-> indexer
+w_repo_work -[#1565C0]down-> repo_indexer
+w_repo_public -[#2E7D32]down-> repo_indexer
 
-' Layer 2 → Layer 3
-work_col -[#1565C0]down-> work_sse
-personal_col -[#2E7D32]down-> personal_sse
-code_col -[#F9A825]down-> code_sse
+' Layer 3: indexers → collections (via routing rules / yaml config)
+indexer -[#1565C0]down-> notes_work
+indexer -[#9E9E9E,dashed]down-> notes_public : (future)
+repo_indexer -[#1565C0]down-> code_work
+repo_indexer -[#2E7D32]down-> code_public
 
-' Layer 3 → Layer 4: Direct SSE access
+' Layer 3 → Layer 4 (collections exposed as named SSE endpoints)
+notes_work -[#1565C0]down-> sse_nw
+notes_public -[#9E9E9E,dashed]down-> sse_np
+code_work -[#1565C0]down-> sse_cw
+code_public -[#2E7D32]down-> sse_cp
+
+' Layer 4 → Layer 5: SSE access (direct or via gateway)
 proxy -[#546E7A]down-> copilot
 proxy -[#546E7A]down-> claude_desktop
 proxy -[#546E7A]down-> claude_code
@@ -122,10 +156,10 @@ proxy -[#546E7A]down-> opencode
 proxy -[#546E7A]down-> cline
 
 legend bottom right
-  |<#BBDEFB> Work (Profisee) |
-  |<#C8E6C9> Personal |
-  |<#FFF9C4> Code (Git repos) |
-  | Clients connect directly via SSE |
+  |<#BBDEFB> Work scope |
+  |<#C8E6C9> Public scope |
+  |<#F5F5F5> Future / not yet indexed |
+  | Watchers poll mounts; trigger indexers; collection name set per yaml config |
 end legend
 
 @enduml
@@ -151,14 +185,27 @@ Standalone Debian-based container (`python:3.12-slim`) running `mcp-proxy` + `mc
 - **Port:** 7020
 - **Embedding model:** `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
 - **Vector name:** `fast-all-minilm-l6-v2` (set by mcp-server-qdrant's FastEmbed provider)
-- **Named servers:** Configured in `servers.json` (e.g., `qdrant-work`, `qdrant-personal`)
+- **Named servers:** Configured in `servers.json` — one entry per Qdrant collection. The container exposes each as an SSE endpoint at `/servers/<name>/sse`.
+
+#### Multi-collection routing pattern
+
+The container is content-type and scope agnostic — any number of collections can be defined. A common pattern is `<content-type>-<scope>` so an agent can route queries correctly:
+
+| Example collection | Content type | Scope |
+|---|---|---|
+| `notes-work` | Obsidian notes | Work content |
+| `notes-personal` | Obsidian notes | Personal content |
+| `code-work` | Source code | Work repositories |
+| `code-public` | Source code | Personal / public repositories |
+
+Each collection gets its own entry in `servers.json` (separate SSE endpoint), and is populated by an indexer config (`indexer.yaml` for notes, one `repos-*.yaml` per scope for code). See [Multi-collection routing](#multi-collection-routing) below.
 
 #### Setup
 
 ```bash
 # Copy example config and customize for your machine
 cp servers.json.example servers.json
-# Edit servers.json - remove qdrant-personal if you only need work collection
+# Edit servers.json — declare one entry per collection you want exposed
 
 # Build and start
 docker compose up -d --build
@@ -181,9 +228,9 @@ cd indexer
 # Copy example config and customize for your machine
 cp indexer.yaml.example indexer.yaml
 # Edit indexer.yaml:
-#   - Set vault_path to your Obsidian vault location
-#   - Adjust collections and routing for your needs
-#   - Set skip_unrouted: true for work-only indexing
+#   - vault_path comes from ~/ai/local.yaml (machine-specific) — not in this file
+#   - Define one or more `collections:` and `routing:` rules to map vault folders to collections
+#   - Set skip_unrouted: true to ignore files outside any routing rule (e.g., work-only machine)
 
 # Create virtual environment
 python3 -m venv .venv
@@ -354,22 +401,28 @@ The full tool name depends on the client (e.g., `qdrant-work_qdrant-find` in Cop
 
 ## Repository Indexing
 
-Indexes local Git repositories into a `code` collection for semantic search over codebases.
+Indexes local Git repositories into one or more code collections for semantic search over codebases.
 
-### Collection
+### Splitting by scope (recommended)
 
-| Collection | Content |
-|---|---|
-| `code` | Source code, configs, docs from Git repos |
+For repositories spanning multiple ownership scopes (e.g., work vs personal), use one config file per scope so queries can target a specific corpus:
 
-Same pattern as `work`/`personal` — named server in `servers.json`, SSE endpoint on port 7020.
+| Example config | Example collection | Use case |
+|---|---|---|
+| `repos-work.yaml` | `code-work` | Employer/team repositories |
+| `repos-public.yaml` | `code-public` | Personal / public repositories |
+
+Each config sets a `qdrant_collection:` field at the top level. The indexer reads this to know where to upsert. Backwards compatible: configs without the field default to a `code` collection.
+
+A single shared `repos.yaml` is also supported when scope splitting isn't needed.
 
 ### Configuration
 
-All repo indexer settings live in `indexer/repos.json` — no code changes needed to add/remove repos or adjust skip patterns.
+All repo indexer settings live in `indexer/repos*.yaml` — no code changes needed to add/remove repos or adjust skip patterns.
 
 | Key | Purpose |
 |---|---|
+| `qdrant_collection` | Destination collection (defaults to `code` for back-compat) |
 | `repos_base` | Base directory for repositories (e.g., `~/Repositories`) |
 | `repos` | List of repository directory names to index |
 | `skip_dirs` | Directories to skip (e.g., `.git`, `node_modules`, `dist`) |
@@ -445,11 +498,46 @@ Each point stores:
 
 Exposes the same `qdrant-find` and `qdrant-store` operations as other collections.
 
+## Watcher Sidecars (auto-reindex)
+
+Long-running sidecar containers that watch filesystem mounts and trigger the indexer subprocess on changes. One sidecar per indexer scope. All sidecars share the same image as the indexer (`qdrant-mcp-indexer:cpu` or `:gpu`) — just a different `command` and config.
+
+### What's included
+
+| Sidecar | Watches | Triggers |
+|---|---|---|
+| `obsidian-watcher` | `/vault` mount | `index_obsidian.py --config /app/indexer.yaml` |
+| `repo-watcher-work` (optional) | `/repos` mount | `index_repos.py --config /app/repos.yaml` (work scope) |
+| `repo-watcher-public` (optional) | `/repos` mount | `index_repos.py --config /app/repos.yaml` (public scope) |
+
+Each sidecar config file (`watcher-*.yaml`) defines:
+- `watch_path` — where in the container to watch
+- `watched_extensions` — file extensions that wake the watcher
+- `indexer_cmd` — command to run on debounced trigger
+- `debounce_seconds`, `min_interval_seconds`, `poll_interval_seconds`, `idle_only` — tuning knobs
+- `lockfile` — distinct per sidecar so concurrent watchers don't fight
+
+### Critical detail: PollingObserver on Windows + Docker
+
+The watcher uses `watchdog.observers.polling.PollingObserver`, not native inotify. Docker Desktop on Windows + WSL2 does not reliably propagate inotify events across the bind-mount boundary — polling is the only thing that actually works on that host topology. On Linux hosts you could swap to the native observer.
+
+### Adding a watcher for a new scope
+
+1. Add a `<name>-watcher` service to `docker-compose.yml` mounting the source path + a yaml config
+2. Copy `watcher-obsidian.yaml.example` (CPU/notes) or `watcher-repos.yaml.example` (GPU/code) as the starting schema
+3. Point `indexer_cmd` at the corresponding indexer + config
+4. `docker compose up -d --build <name>-watcher`
+
 ## Future Work
 
-- [ ] Automate re-indexing via launchd/cron schedule
+- [x] ~~Automate re-indexing via launchd/cron schedule~~ — done via watcher sidecars (see above)
 - [ ] Add AI skills + memory indexing
 - [ ] Migrate Qdrant DB to Synology NAS
 - [ ] Evaluate upgrading to a larger embedding model (nomic-embed-text 768d or mxbai-embed-large 1024d)
+- [ ] Linux host variant of the watcher using native inotify observer
+
+## Related tools
+
+- **[graphify](https://github.com/safishamsi/graphify)** — complementary to qdrant code collections. Where qdrant code collections answer "find code semantically similar to X," graphify builds a structural call/dependency graph that answers "where is X called from / what's the path between A and B." Lives as a host-side CLI + MCP, separate from this Compose stack. Use both: qdrant for semantic recall, graphify for structural navigation.
 
 
