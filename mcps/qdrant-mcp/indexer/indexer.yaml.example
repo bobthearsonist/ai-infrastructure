@@ -18,17 +18,17 @@ qdrant_url: http://qdrant:6333
 # =============================================================================
 # REQUIRED: Collections to create/use
 # =============================================================================
-# Work machine (Windows): only 'work'
-# Home machine (Mac): both 'work' and 'personal'
+# Work machine (Windows): only 'notes-work'
+# Home machine (Mac): both 'notes-work' and 'notes-personal'
 collections:
-  - work
-  - personal
+  - notes-work
+  - notes-personal
 
 # =============================================================================
 # Routing: which folders go to which collection
 # =============================================================================
 routing:
-  work:
+  notes-work:
     - "0 Profisee"    # Profisee work notes folder
 
 # =============================================================================
@@ -49,7 +49,7 @@ skip_dirs:
 # Work machine: skip_unrouted: true (only index work content)
 # Home machine: skip_unrouted: false (index everything)
 skip_unrouted: false
-default_collection: personal
+default_collection: notes-personal
 
 # =============================================================================
 # Embedding settings (must match qdrant-mcp server config)

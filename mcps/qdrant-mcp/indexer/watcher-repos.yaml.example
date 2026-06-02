@@ -1,0 +1,115 @@
+# Repository code watcher configuration
+# Copy this file to watcher-repos.yaml and mount it into the
+# repo-watcher container at /app/watcher.yaml.
+#
+# This config drives watcher.py — a generic debounced filesystem
+# watcher that triggers an indexer CLI as a subprocess on changes.
+# Each indexer (vault, repos, future ones) gets its own watcher
+# config; the watcher code itself stays unaware of what it's indexing.
+
+# =============================================================================
+# REQUIRED: Path inside the container to watch (recursive)
+# =============================================================================
+# Must be mounted into the container by docker-compose. The repo-watcher
+# service mounts ${REPOS_BASE} (host) -> /repos (container, read-only).
+watch_path: /repos
+
+# =============================================================================
+# REQUIRED: File extensions that trigger reindex (case-insensitive)
+# =============================================================================
+# Mirrors index_extensions from repos.yaml — anything outside this set is
+# ignored so build artifacts, lockfiles, binaries, and IDE churn don't
+# trigger no-op reindexes. Leading dot is optional ("py" and ".py" both work).
+watched_extensions:
+  - .py
+  - .ts
+  - .tsx
+  - .js
+  - .jsx
+  - .go
+  - .rs
+  - .rb
+  - .java
+  - .c
+  - .cpp
+  - .h
+  - .hpp
+  - .cs
+  - .sh
+  - .bash
+  - .zsh
+  - .fish
+  - .ps1
+  - .psm1
+  - .yaml
+  - .yml
+  - .json
+  - .toml
+  - .ini
+  - .cfg
+  - .conf
+  - .md
+  - .txt
+  - .rst
+  - .adoc
+  - .html
+  - .css
+  - .scss
+  - .less
+  - .sql
+  - .dockerfile
+  - .tf
+  - .hcl
+  - .xml
+  - .plist
+  - .csproj
+  - .sln
+  - .props
+  - .lua
+  - .vim
+  - .el
+
+# =============================================================================
+# REQUIRED: Indexer command to run on debounced trigger
+# =============================================================================
+# Pass either a list (preferred — no shell parsing surprises) or a string
+# (shlex-split at load time).
+indexer_cmd:
+  - python3
+  - index_repos.py
+  - --config
+  - /app/repos.yaml
+
+# =============================================================================
+# OPTIONAL: Tuning knobs (defaults shown)
+# =============================================================================
+
+# Working directory for the indexer subprocess. Defaults to /app.
+indexer_cwd: /app
+
+# Path to a lockfile used to skip overlapping runs. MUST be distinct from
+# the obsidian-watcher lockfile (.watcher.lock) since both watchers share
+# the same image and could potentially share a volume layout.
+lockfile: /app/.watcher-repos.lock
+
+# Wait this long after the last change before reindexing.
+# Code changes come in bursts during builds (compilers regenerate dozens
+# of files), so a longer debounce lets the burst settle before reindexing.
+# 300s = 5 minutes — coalesces a full build cycle into one reindex pass.
+debounce_seconds: 300
+
+# Filesystem polling cadence. PollingObserver is required across the
+# Windows host → Linux container bind-mount boundary; inotify won't fire.
+# 5s is less aggressive than the vault watcher's 2s — saves CPU since
+# code repos churn more aggregate filesystem activity than the vault.
+poll_interval_seconds: 5
+
+# Hard floor between consecutive runs even under continuous editing —
+# prevents thrash during build storms (e.g., back-to-back rebuilds while
+# iterating on a fix). 10-minute floor matches typical edit-build-test loops.
+min_interval_seconds: 600
+
+# Idle-only: each new save resets the debounce timer, so we only reindex
+# after activity has stopped for debounce_seconds. Set false for
+# fire-on-first-event behavior (more responsive, more reindex runs).
+idle_only: true

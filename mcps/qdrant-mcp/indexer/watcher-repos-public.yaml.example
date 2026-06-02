@@ -1,0 +1,92 @@
+# Repository code watcher configuration — PUBLIC repos
+# Copy this file to watcher-repos-public.yaml and mount it into the
+# repo-watcher-public container at /app/watcher.yaml.
+#
+# Mirrors watcher-repos.yaml but with a distinct lockfile path so the
+# two watchers (work + public) don't trip each other. The collection
+# selection is driven by the mounted repos.yaml (repos-public.yaml
+# specifies qdrant_collection: code-public), not by anything here.
+
+# =============================================================================
+# REQUIRED: Path inside the container to watch (recursive)
+# =============================================================================
+# Must be mounted into the container by docker-compose. The repo-watcher
+# service mounts ${REPOS_BASE} (host) -> /repos (container, read-only).
+watch_path: /repos
+
+# =============================================================================
+# REQUIRED: File extensions that trigger reindex (case-insensitive)
+# =============================================================================
+watched_extensions:
+  - .py
+  - .ts
+  - .tsx
+  - .js
+  - .jsx
+  - .go
+  - .rs
+  - .rb
+  - .java
+  - .c
+  - .cpp
+  - .h
+  - .hpp
+  - .cs
+  - .sh
+  - .bash
+  - .zsh
+  - .fish
+  - .ps1
+  - .psm1
+  - .yaml
+  - .yml
+  - .json
+  - .toml
+  - .ini
+  - .cfg
+  - .conf
+  - .md
+  - .txt
+  - .rst
+  - .adoc
+  - .html
+  - .css
+  - .scss
+  - .less
+  - .sql
+  - .dockerfile
+  - .tf
+  - .hcl
+  - .xml
+  - .plist
+  - .csproj
+  - .sln
+  - .props
+  - .lua
+  - .vim
+  - .el
+
+# =============================================================================
+# REQUIRED: Indexer command to run on debounced trigger
+# =============================================================================
+# Points at repos-public.yaml mounted into the public watcher container.
+indexer_cmd:
+  - python3
+  - index_repos.py
+  - --config
+  - /app/repos.yaml
+
+# =============================================================================
+# OPTIONAL: Tuning knobs (defaults shown)
+# =============================================================================
+
+indexer_cwd: /app
+
+# Distinct lockfile so the public watcher doesn't collide with the work
+# watcher (which uses .watcher-repos.lock).
+lockfile: /app/.watcher-repos-public.lock
+
+debounce_seconds: 300
+poll_interval_seconds: 5
+min_interval_seconds: 600
+idle_only: true

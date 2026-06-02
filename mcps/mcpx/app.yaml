@@ -148,12 +148,15 @@ toolGroups:
   - name: coding
     services:
       context7: "*"
-  - name: knowledge-work
+  - name: knowledge-notes-work
     services:
-      qdrant-work: "*"
-  - name: knowledge-code
+      qdrant-notes-work: "*"
+  - name: knowledge-code-work
     services:
-      qdrant-code: "*"
+      qdrant-code-work: "*"
+  - name: knowledge-code-public
+    services:
+      qdrant-code-public: "*"
   - name: devops
     services:
       azure-devops: "*"

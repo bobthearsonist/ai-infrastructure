@@ -1,0 +1,65 @@
+# Obsidian-vault watcher configuration
+# Copy this file to watcher-obsidian.yaml and mount it into the
+# obsidian-watcher container at /app/watcher.yaml.
+#
+# This config drives watcher.py — a generic debounced filesystem
+# watcher that triggers an indexer CLI as a subprocess on changes.
+# Each indexer (vault, repos, future ones) gets its own watcher
+# config; the watcher code itself stays unaware of what it's indexing.
+
+# =============================================================================
+# REQUIRED: Path inside the container to watch (recursive)
+# =============================================================================
+# Must be mounted into the container by docker-compose.
+watch_path: /vault
+
+# =============================================================================
+# REQUIRED: File extensions that trigger reindex (case-insensitive)
+# =============================================================================
+# Anything outside this set is ignored — keeps .obsidian/ churn and
+# attachment writes from triggering no-op reindexes.
+# Leading dot is optional ("md" and ".md" both work).
+watched_extensions:
+  - .md
+
+# =============================================================================
+# REQUIRED: Indexer command to run on debounced trigger
+# =============================================================================
+# Pass either a list (preferred — no shell parsing surprises) or a string
+# (shlex-split at load time).
+indexer_cmd:
+  - python
+  - index_obsidian.py
+  - --config
+  - /app/indexer.yaml
+
+# =============================================================================
+# OPTIONAL: Tuning knobs (defaults shown)
+# =============================================================================
+
+# Working directory for the indexer subprocess. Defaults to /app.
+indexer_cwd: /app
+
+# Path to a lockfile used to skip overlapping runs. Defaults to /app/.watcher.lock.
+# Use a distinct path per watcher instance if you ever run more than one
+# in the same image / volume layout.
+lockfile: /app/.watcher.lock
+
+# Wait this long after the last change before reindexing.
+# Lower = fresher, more churn. Higher = more batching, more lag.
+# 30s coalesces typing bursts without making edits feel stale.
+debounce_seconds: 30
+
+# Filesystem polling cadence. PollingObserver is required across the
+# Windows host → Linux container bind-mount boundary; inotify won't fire.
+# 2s is cheap on CPU and snappy enough for save-driven workflows.
+poll_interval_seconds: 2
+
+# Hard floor between consecutive runs even under continuous editing —
+# prevents back-to-back reindexes during marathon writing sessions.
+min_interval_seconds: 60
+
+# Idle-only: each new save resets the debounce timer, so we only reindex
+# after you've stopped editing for debounce_seconds. Set false for
+# fire-on-first-event behavior (more responsive, more reindex runs).
+idle_only: true

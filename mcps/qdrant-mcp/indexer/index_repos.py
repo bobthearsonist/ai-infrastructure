@@ -37,7 +37,10 @@ PROVIDERS, BATCH_SIZE = detect_providers()
 
 # --- Constants (tied to mcp-server-qdrant, not user-configurable) ---
 
-COLLECTION_NAME = "code"
+# Default Qdrant collection name. Backwards-compatible default for configs
+# that don't specify `qdrant_collection`. New work/public splits override
+# this via the YAML field — see repos-work.yaml / repos-public.yaml.
+DEFAULT_COLLECTION_NAME = "code"
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 VECTOR_SIZE = 384
 VECTOR_NAME = "fast-all-minilm-l6-v2"  # Must match mcp-server-qdrant's naming
@@ -101,6 +104,9 @@ def load_config(config_path: str) -> dict:
     config["index_extensions"] = set(config.get("index_extensions", []))
     config["index_filenames"] = set(config.get("index_filenames", []))
     config.setdefault("max_chunk_chars", 1200)
+    # Allow per-config Qdrant collection. Backwards compatible: old configs
+    # without this field continue to write to the legacy "code" collection.
+    config.setdefault("qdrant_collection", DEFAULT_COLLECTION_NAME)
     return config
 
 
@@ -303,7 +309,11 @@ def walk_repo(repo_path: Path, cfg: dict):
 
         for fname in sorted(files):
             fpath = root / fname
-            if should_index_file(fpath, cfg):
+            # is_file() guard: defensive against broken symlinks or pathlib
+            # walk edge cases. Profisee repos don't use Obsidian's note-as-folder
+            # pattern, but the cost of the check is negligible and the crash
+            # mode (IsADirectoryError on read_bytes) is the same.
+            if should_index_file(fpath, cfg) and fpath.is_file():
                 yield fpath
 
 
@@ -318,6 +328,7 @@ def index_repo(
     stats: dict,
     current_keys: set,
     dry_run: bool,
+    collection_name: str,
 ) -> int:
     """Index a single repository. Returns count of files indexed."""
     max_chars = cfg["max_chunk_chars"]
@@ -390,7 +401,7 @@ def index_repo(
                             "language": language,
                             "chunk_index": i,
                             "total_chunks": len(chunks),
-                            "collection": COLLECTION_NAME,
+                            "collection": collection_name,
                             "last_modified": datetime.fromtimestamp(
                                 fpath.stat().st_mtime, tz=timezone.utc
                             ).isoformat(),
@@ -407,13 +418,13 @@ def index_repo(
                 old_ids = [
                     make_point_id(repo_name, rel_str, i) for i in range(old_count)
                 ]
-                client.delete(collection_name=COLLECTION_NAME, points_selector=old_ids)
+                client.delete(collection_name=collection_name, points_selector=old_ids)
 
             # Batch upserts to stay under Qdrant's 32MB payload limit
             UPSERT_BATCH = 100
             for bi in range(0, len(points), UPSERT_BATCH):
                 client.upsert(
-                    collection_name=COLLECTION_NAME,
+                    collection_name=collection_name,
                     points=points[bi : bi + UPSERT_BATCH],
                 )
 
@@ -442,16 +453,31 @@ def main():
         sys.exit(1)
 
     config_path = Path(args.config)
-    state_file = config_path.parent / ".index_repos_state.json"
 
     cfg = load_config(args.config)
     repos_base = cfg["repos_base"]
     repos = cfg["repos"]
+    collection_name = cfg["qdrant_collection"]
+
+    # State file is per-config so multiple configs (work + public) don't
+    # fight over a single state JSON. Use the config stem so
+    # repos-work.yaml -> .index_repos_state_work.json,
+    # repos-public.yaml -> .index_repos_state_public.json,
+    # legacy repos.yaml -> .index_repos_state.json (backwards compat).
+    stem = config_path.stem
+    if stem == "repos":
+        state_file = config_path.parent / ".index_repos_state.json"
+    elif stem.startswith("repos-"):
+        suffix = stem[len("repos-"):]
+        state_file = config_path.parent / f".index_repos_state_{suffix}.json"
+    else:
+        state_file = config_path.parent / f".index_repos_state_{stem}.json"
 
     print(f"Repos base: {repos_base}")
     print(f"Repos: {len(repos)}")
     print(f"Qdrant: {qdrant_url}")
-    print(f"Collection: {COLLECTION_NAME}")
+    print(f"Collection: {collection_name}")
+    print(f"State file: {state_file}")
     print(f"Model: {EMBEDDING_MODEL}")
     if args.force:
         print("Mode: FULL RE-INDEX (--force)")
@@ -468,7 +494,7 @@ def main():
     # Initialize
     client = QdrantClient(url=qdrant_url)
     embedder = TextEmbedding(model_name=EMBEDDING_MODEL, providers=PROVIDERS)
-    ensure_collection(client, COLLECTION_NAME)
+    ensure_collection(client, collection_name)
 
     using_gpu = "CUDAExecutionProvider" in PROVIDERS
     print(f"Providers: {PROVIDERS}")
@@ -498,6 +524,7 @@ def main():
             stats,
             current_keys,
             args.dry_run,
+            collection_name,
         )
         if repo_files:
             print(f"  {repo_files} files indexed")
@@ -520,7 +547,7 @@ def main():
                 for i in range(old.get("chunks", 0))
             ]
             if old_ids and not args.dry_run:
-                client.delete(collection_name=COLLECTION_NAME, points_selector=old_ids)
+                client.delete(collection_name=collection_name, points_selector=old_ids)
         print(f"  DELETED {del_key}")
 
     # Carry forward state for repos not in current config
@@ -540,8 +567,8 @@ def main():
     print(f"Errors:    {stats['errors']} files")
     print(f"Deleted:   {len(deleted)} files")
 
-    info = client.get_collection(COLLECTION_NAME)
-    print(f"Collection '{COLLECTION_NAME}': {info.points_count} points")
+    info = client.get_collection(collection_name)
+    print(f"Collection '{collection_name}': {info.points_count} points")
 
 
 if __name__ == "__main__":

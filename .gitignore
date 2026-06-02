@@ -58,8 +58,18 @@ mcps/mcpx/mcp.*.json
 mcps/qdrant-mcp/servers.json
 mcps/qdrant-mcp/indexer/indexer.yaml
 mcps/qdrant-mcp/indexer/repos.yaml
+mcps/qdrant-mcp/indexer/repos-work.yaml
+mcps/qdrant-mcp/indexer/repos-public.yaml
+mcps/qdrant-mcp/indexer/watcher-obsidian.yaml
+mcps/qdrant-mcp/indexer/watcher-repos.yaml
+mcps/qdrant-mcp/indexer/watcher-repos-public.yaml
 mcps/qdrant-mcp/indexer/.index_state.json
 mcps/qdrant-mcp/indexer/.index_repos_state.json
+mcps/qdrant-mcp/indexer/.index_repos_state_work.json
+mcps/qdrant-mcp/indexer/.index_repos_state_public.json
+mcps/qdrant-mcp/indexer/.watcher.lock
+mcps/qdrant-mcp/indexer/.watcher-repos.lock
+mcps/qdrant-mcp/indexer/.watcher-repos-public.lock
 !*.example
 
 # Docker

@@ -52,6 +52,7 @@ services:
       - ai-infrastructure
 
   # Obsidian vault indexer (CPU - fast enough for markdown)
+  # One-shot: run manually via `docker compose --profile obsidian up obsidian-indexer`
   obsidian-indexer:
     build:
       context: ./indexer
@@ -70,7 +71,106 @@ services:
     profiles:
       - obsidian
 
-  # Repository code indexer (GPU-accelerated embedding)
+  # Obsidian vault watcher (long-running sidecar)
+  # Polls /vault for .md changes, debounces, invokes index_obsidian.py.
+  # PollingObserver is required because Docker Desktop on Windows + WSL2
+  # does not propagate inotify across the bind-mount boundary.
+  obsidian-watcher:
+    build:
+      context: ./indexer
+      target: cpu
+    image: qdrant-mcp-indexer:cpu
+    container_name: obsidian-watcher
+    restart: unless-stopped
+    command: ["python", "watcher.py", "--config", "/app/watcher.yaml"]
+    volumes:
+      - ${VAULT_PATH:-/nonexistent}:/vault:ro
+      - ./indexer/indexer.yaml:/app/indexer.yaml:ro
+      - ./indexer/watcher-obsidian.yaml:/app/watcher.yaml:ro
+      - ./indexer/.index_state.json:/app/.index_state.json
+      - fastembed-cache:/root/.cache/fastembed
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - ai-infrastructure
+
+  # Repository code watcher — WORK (Profisee canonical repos -> code-work)
+  # Long-running sidecar, GPU-accelerated. Polls /repos for code/config/doc
+  # changes, debounces, invokes index_repos.py against repos-work.yaml.
+  # PollingObserver is required because Docker Desktop on Windows + WSL2
+  # does not propagate inotify across the bind-mount boundary.
+  repo-watcher-work:
+    build:
+      context: ./indexer
+      target: gpu
+    image: qdrant-mcp-indexer:gpu
+    container_name: repo-watcher-work
+    restart: unless-stopped
+    command: ["python3", "watcher.py", "--config", "/app/watcher.yaml"]
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ${REPOS_BASE:-/nonexistent}:/repos:ro
+      - ./indexer/repos-work.yaml:/app/repos.yaml:ro
+      - ./indexer/watcher-repos.yaml:/app/watcher.yaml:ro
+      - ./indexer/.index_repos_state_work.json:/app/.index_repos_state_work.json
+      - fastembed-cache:/root/.cache/fastembed
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - ai-infrastructure
+
+  # Repository code watcher — PUBLIC (bobthearsonist personal repos -> code-public)
+  # Same image as repo-watcher-work but mounts repos-public.yaml and uses
+  # a distinct lockfile path so the two watchers can run side-by-side.
+  repo-watcher-public:
+    build:
+      context: ./indexer
+      target: gpu
+    image: qdrant-mcp-indexer:gpu
+    container_name: repo-watcher-public
+    restart: unless-stopped
+    command: ["python3", "watcher.py", "--config", "/app/watcher.yaml"]
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ${REPOS_BASE:-/nonexistent}:/repos:ro
+      - ./indexer/repos-public.yaml:/app/repos.yaml:ro
+      - ./indexer/watcher-repos-public.yaml:/app/watcher.yaml:ro
+      - ./indexer/.index_repos_state_public.json:/app/.index_repos_state_public.json
+      - fastembed-cache:/root/.cache/fastembed
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    networks:
+      - ai-infrastructure
+
+  # One-shot repository indexer (GPU-accelerated embedding).
+  # Mounts the work repos config by default; override REPOS_CONFIG to
+  # point at repos-public.yaml for an on-demand public reindex.
+  # Usage: `docker compose --profile repos run repo-indexer`
   repo-indexer:
     build:
       context: ./indexer
@@ -82,8 +182,7 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - ${REPOS_BASE:-/nonexistent}:/repos:ro
-      - ./indexer/repos.yaml:/app/repos.yaml:ro
-      - ./indexer/.index_repos_state.json:/app/.index_repos_state.json
+      - ./indexer/${REPOS_CONFIG:-repos-work.yaml}:/app/repos.yaml:ro
     deploy:
       resources:
         reservations:

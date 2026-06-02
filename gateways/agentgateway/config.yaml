@@ -34,15 +34,15 @@ binds:
                       sse:
                         host: http://agentgateway-stdio-proxy:7030/servers/kapture/sse
                     # Qdrant RAG (standalone container - multi-collection)
-                    - name: qdrant-work
+                    - name: qdrant-notes-work
                       sse:
-                        host: http://qdrant-mcp:7020/servers/qdrant-work/sse
-                    - name: qdrant-personal
+                        host: http://qdrant-mcp:7020/servers/qdrant-notes-work/sse
+                    - name: qdrant-code-work
                       sse:
-                        host: http://qdrant-mcp:7020/servers/qdrant-personal/sse
-                    - name: qdrant-code
+                        host: http://qdrant-mcp:7020/servers/qdrant-code-work/sse
+                    - name: qdrant-code-public
                       sse:
-                        host: http://qdrant-mcp:7020/servers/qdrant-code/sse
+                        host: http://qdrant-mcp:7020/servers/qdrant-code-public/sse
                     - name: context7
                       mcp:
                         host: http://context7-mcp:7008/mcp

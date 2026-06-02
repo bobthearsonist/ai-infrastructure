@@ -27,20 +27,20 @@
       "type": "streamable-http",
       "icon": "#8E44AD"
     },
-    "qdrant-work": {
-      "url": "http://host.docker.internal:7020/servers/qdrant-work/sse",
+    "qdrant-notes-work": {
+      "url": "http://host.docker.internal:7020/servers/qdrant-notes-work/sse",
       "type": "sse",
       "icon": "#DC382D"
     },
-    "qdrant-personal": {
-      "url": "http://host.docker.internal:7020/servers/qdrant-personal/sse",
-      "type": "sse",
-      "icon": "#E74C3C"
-    },
-    "qdrant-code": {
-      "url": "http://host.docker.internal:7020/servers/qdrant-code/sse",
+    "qdrant-code-work": {
+      "url": "http://host.docker.internal:7020/servers/qdrant-code-work/sse",
       "type": "sse",
       "icon": "#F39C12"
+    },
+    "qdrant-code-public": {
+      "url": "http://host.docker.internal:7020/servers/qdrant-code-public/sse",
+      "type": "sse",
+      "icon": "#27AE60"
     },
     "sequential-thinking": {
       "type": "stdio",

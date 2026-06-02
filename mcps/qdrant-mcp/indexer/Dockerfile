@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY index_obsidian.py .
 COPY index_repos.py .
+COPY watcher.py .
 
 # ---- GPU target ----
 FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04 AS gpu
@@ -31,6 +32,7 @@ RUN pip install --no-cache-dir --break-system-packages -r requirements-gpu.txt
 
 COPY index_obsidian.py .
 COPY index_repos.py .
+COPY watcher.py .
 
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility

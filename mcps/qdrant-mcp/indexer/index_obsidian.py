@@ -246,14 +246,25 @@ class Indexer:
             "unrouted": 0,
         }
 
-        # Collect all markdown files
-        md_files = sorted(self.vault_path.rglob("*.md"))
-        print(f"Found {len(md_files)} markdown files")
+        # Collect all markdown-name paths. rglob("*.md") matches both files
+        # AND directories by name — Obsidian's "note-as-folder" pattern
+        # creates directories ending in `.md` (containing the note plus
+        # attachments). We log + skip non-files defensively so a future
+        # vault corruption surfaces in the logs instead of crashing
+        # file_hash() with IsADirectoryError.
+        md_paths = sorted(self.vault_path.rglob("*.md"))
+        print(f"Found {len(md_paths)} markdown name matches")
 
         # Track which files still exist (for cleanup)
         current_files = set()
 
-        for md_file in md_files:
+        for md_file in md_paths:
+            if not md_file.is_file():
+                print(
+                    f"  WARNING: skipping non-file path that matched .md filter: {md_file}"
+                )
+                continue
+
             rel = md_file.relative_to(self.vault_path)
 
             if self.should_skip(rel):
