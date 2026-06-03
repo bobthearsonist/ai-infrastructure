@@ -4,8 +4,9 @@ permissions:
     allow:
       - core
       - coding
-      - knowledge-work
-      - knowledge-code
+      - knowledge-notes-work
+      - knowledge-code-work
+      - knowledge-code-public
       - knowledge-personal
       - devops
       - diagrams
@@ -19,8 +20,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -33,8 +35,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -47,8 +50,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -61,8 +65,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -75,8 +80,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -89,8 +95,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -103,8 +110,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -117,8 +125,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
@@ -131,8 +140,9 @@ permissions:
       allow:
         - core
         - coding
-        - knowledge-work
-        - knowledge-code
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
         - knowledge-personal
         - devops
         - diagrams
