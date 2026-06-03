@@ -24,8 +24,9 @@ Image: `us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest` (0.4.x li
 | memory                | core               | stdio (local npx) | spawned by mcpx                                               |
 | kapture               | browser            | stdio (local npx) | spawned by mcpx                                               |
 | context7              | coding             | streamable-http   | `host.docker.internal:7008/mcp`                               |
-| qdrant-work           | knowledge-work     | SSE               | `host.docker.internal:7020/servers/qdrant-work/sse`           |
-| qdrant-code           | knowledge-code     | SSE               | `host.docker.internal:7020/servers/qdrant-code/sse`           |
+| qdrant-notes-work     | knowledge-notes-work  | SSE               | `host.docker.internal:7020/servers/qdrant-notes-work/sse`     |
+| qdrant-code-work      | knowledge-code-work   | SSE               | `host.docker.internal:7020/servers/qdrant-code-work/sse`      |
+| qdrant-code-public    | knowledge-code-public | SSE               | `host.docker.internal:7020/servers/qdrant-code-public/sse`    |
 | qdrant-personal       | knowledge-personal | SSE               | `host.docker.internal:7020/servers/qdrant-personal/sse`       |
 | hass-mcp              | homelab            | SSE               | `mcpx-stdio-proxy:7030/servers/hass-mcp/sse` (uvx via proxy)  |
 | photoshop             | creative           | SSE               | `mcpx-stdio-proxy:7030/servers/photoshop/sse` (uvx via proxy) |
@@ -38,8 +39,9 @@ Image: `us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest` (0.4.x li
 | ------------------ | ---------------- | ----------------------------- |
 | core               | all consumers    | sequential-thinking, memory   |
 | coding             | all consumers    | context7                      |
-| knowledge-work     | all consumers    | qdrant-work                   |
-| knowledge-code     | all consumers    | qdrant-code                   |
+| knowledge-notes-work  | all consumers    | qdrant-notes-work             |
+| knowledge-code-work   | all consumers    | qdrant-code-work              |
+| knowledge-code-public | all consumers    | qdrant-code-public            |
 | knowledge-personal | all consumers    | qdrant-personal               |
 | devops             | all consumers    | azure-devops (not configured) |
 | diagrams           | all consumers    | mermaid (not configured)      |
