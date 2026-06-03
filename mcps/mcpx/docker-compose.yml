@@ -51,8 +51,13 @@ services:
     depends_on:
       stdio-proxy:
         condition: service_healthy
+    # Probe mcpx-server's own Prometheus metrics endpoint, NOT the UI.
+    # The UI is a separate supervisord program — if mcpx-server FATALs
+    # (e.g. bad app.yaml) the UI stays up and the container looks "healthy"
+    # while the gateway on :9000 is dead. The metrics endpoint is started
+    # by mcpx-server itself, so a 2xx here proves the gateway is alive.
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5173/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/metrics"]
       interval: 30s
       timeout: 10s
       retries: 3
