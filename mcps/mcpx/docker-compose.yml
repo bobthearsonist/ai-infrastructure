@@ -2,6 +2,10 @@ name: mcpx
 
 include:
   - path: ../../mcps/stdio-proxy/docker-compose.yml
+  # Per-server overlays — each adds the mounts/env its MCP needs to the
+  # shared stdio-proxy. Compose merges service definitions across includes
+  # so these are additive, not replacements.
+  - path: ../../mcps/azure-devops/docker-compose.yml
 
 services:
   # Extend the included stdio-proxy to also reach ai-shared services

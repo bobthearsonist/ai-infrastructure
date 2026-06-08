@@ -20,6 +20,22 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+    # Disable IPv6 in the container's network namespace. The MCPs hosted
+    # here make outbound HTTPS via Python (urllib3/requests), which does
+    # NOT do happy-eyeballs fallback. The Docker bridge has no IPv6 route,
+    # so AAAA-only resolver answers (e.g. login.microsoftonline.com) would
+    # otherwise produce "Errno 101 Network unreachable" before urllib3
+    # walks through to an A record.
+    #
+    # NOTE: getaddrinfo still returns AF_INET6 entries (the resolver does
+    # not consult this sysctl) — what saves us is that AF_INET6 socket()
+    # / connect() fails immediately, so urllib3's retry loop reaches an
+    # IPv4 entry without a slow timeout. We do NOT also set
+    # RES_OPTIONS=no-aaaa here: this image is musl libc (Alpine), which
+    # ignores it. If the proxy ever switches to a glibc base image,
+    # adding it would skip AAAA queries entirely, saving DNS round trips.
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
     healthcheck:
       # mcp-proxy only starts listening AFTER all MCPs are initialized
       # So if /status responds, the MCPs are ready

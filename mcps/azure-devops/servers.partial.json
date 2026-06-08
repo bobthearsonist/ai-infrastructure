@@ -1,0 +1,12 @@
+{
+  "_comment": "Reference snippet — merge this entry into the stdio-proxy servers.json that hosts the Azure DevOps MCP (e.g. mcps/stdio-proxy/servers.windows-work.json). Kept here so the MCP's launch args live next to its docker-compose overlay.",
+  "mcpServers": {
+    "azure-devops": {
+      "command": "npx",
+      "args": ["-y", "@azure-devops/mcp", "-a", "azcli", "profisee"],
+      "env": {
+        "AZURE_CONFIG_DIR": "/root/.azure"
+      }
+    }
+  }
+}

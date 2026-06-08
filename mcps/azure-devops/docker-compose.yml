@@ -1,0 +1,32 @@
+name: azure-devops
+
+# Per-server overlay for the Azure DevOps MCP (@azure-devops/mcp).
+#
+# This fragment is NOT a standalone stack — it has no services of its own.
+# It only patches the shared `stdio-proxy` service that hosts the MCP
+# subprocess, adding the credential mount that this specific MCP needs.
+#
+# Consumed by an outer stack (e.g. mcps/mcpx/docker-compose.yml) via:
+#
+#     include:
+#       - path: ../../mcps/stdio-proxy/docker-compose.yml
+#       - path: ../../mcps/azure-devops/docker-compose.yml
+#
+# Compose merges service definitions across includes, so the volume list
+# here is additive — it does not replace mounts declared elsewhere.
+
+services:
+  stdio-proxy:
+    volumes:
+      # The Azure DevOps MCP runs with `-a azcli`, which makes the Azure
+      # SDK shell out to `az` for tokens. The container has the `az` CLI
+      # installed but no token cache of its own, so we bind-mount the
+      # host's `~/.azure` directory. AzureCliCredential then succeeds
+      # using whatever account the user is logged into on the host.
+      #
+      # Read-write is required: `az` rotates msal_token_cache.bin on
+      # refresh; a :ro mount would work at first login then silently fail
+      # ~60min later when the access token expires.
+      #
+      # AZURE_DIR is set in stdio-proxy/.env (defaults to ~/.azure).
+      - ${AZURE_DIR:-~/.azure}:/root/.azure
