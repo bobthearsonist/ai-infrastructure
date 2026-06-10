@@ -303,7 +303,7 @@ These are NOT part of the Compose stack — they install on the host directly (C
 
 | Tool | Type | Role | Status |
 | ---- | ---- | ---- | ------ |
-| [graphify](https://github.com/safishamsi/graphify) | CLI + MCP + Claude skill | Structural code-graph (Tree-sitter AST → call/dep graph, community detection). Complements qdrant code collections — structural queries vs semantic similarity. Installs git `post-commit` + `post-checkout` hooks per repo for auto-rebuild. | ✅ Available via `uv tool install graphifyy` |
+| [graphify](https://github.com/safishamsi/graphify) | CLI + MCP + Claude skill | Structural code-graph (Tree-sitter AST → call/dep graph, community detection). Complements qdrant code collections — structural queries vs semantic similarity. Supports dual-mode deployment: workspace graph for coupled repo clusters + per-repo graphs for standalone repos. See [graphify-workspace-setup.md](docs/graphify-workspace-setup.md) for full setup. | ✅ Available via `uv tool install graphifyy` |
 
 ## Quick Start
 

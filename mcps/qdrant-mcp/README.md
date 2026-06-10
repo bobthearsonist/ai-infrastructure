@@ -538,6 +538,6 @@ The watcher uses `watchdog.observers.polling.PollingObserver`, not native inotif
 
 ## Related tools
 
-- **[graphify](https://github.com/safishamsi/graphify)** — complementary to qdrant code collections. Where qdrant code collections answer "find code semantically similar to X," graphify builds a structural call/dependency graph that answers "where is X called from / what's the path between A and B." Lives as a host-side CLI + MCP, separate from this Compose stack. Use both: qdrant for semantic recall, graphify for structural navigation.
+- **[graphify](https://github.com/safishamsi/graphify)** — complementary to qdrant code collections. Where qdrant code collections answer "find code semantically similar to X," graphify builds a structural call/dependency graph that answers "where is X called from / what's the path between A and B." Lives as a host-side CLI + MCP, separate from this Compose stack. Setup guide (dual-mode workspace + per-repo deployment, auto-rebuild via git hooks): [../../docs/graphify-workspace-setup.md](../../docs/graphify-workspace-setup.md). Use both: qdrant for semantic recall, graphify for structural navigation.
 
 

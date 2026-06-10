@@ -322,6 +322,21 @@ Parse codebase into a graph database, let agents query relationships via MCP.
 
 ---
 
+## Implemented solution
+
+As of 2026-06, the working setup on this stack uses **[graphify](https://github.com/safishamsi/graphify)** (Tree-sitter AST → structural code graph + community detection) in a **dual-mode deployment**:
+
+- **Workspace graph** for coupled repo clusters (preserves cross-repo edges)
+- **Per-repo graphs** for standalone repos (smaller, isolated)
+- Auto-rebuild via git post-commit hooks (AST-only — no LLM key needed at runtime)
+- Generic config-driven setup so others can replicate on their own scope split
+
+Implementation guide: **[graphify-workspace-setup.md](./graphify-workspace-setup.md)**
+
+This does **not** solve the Roslyn-grade C# call hierarchy problem this doc surveys — graphify is Tree-sitter-based, so it's accurate for symbols but won't resolve overloads, generics, or DI registrations. It's a pragmatic 80% solution that's actually shipping today. The LSP/SCIP options here remain the future answer for the harder 20%.
+
+---
+
 ## References
 
 - [Sourcegraph SCIP Protocol](https://github.com/sourcegraph/scip)

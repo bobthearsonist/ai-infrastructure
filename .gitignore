@@ -88,3 +88,6 @@ mcps/memory/data/
 
 # Session notes (may contain sensitive session data)
 docs/session-thought.md
+
+# graphify per-repo graph artifacts (built locally, not source-controlled)
+graphify-out/
