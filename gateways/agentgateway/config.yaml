@@ -43,6 +43,9 @@ binds:
                     - name: qdrant-code-public
                       sse:
                         host: http://qdrant-mcp:7020/servers/qdrant-code-public/sse
+                    - name: qdrant-personal
+                      sse:
+                        host: http://qdrant-mcp:7020/servers/qdrant-personal/sse
                     - name: context7
                       mcp:
                         host: http://context7-mcp:7008/mcp
