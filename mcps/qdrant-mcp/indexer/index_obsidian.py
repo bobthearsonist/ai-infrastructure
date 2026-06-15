@@ -22,7 +22,13 @@ from typing import Any
 import yaml
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    HnswConfigDiff,
+    OptimizersConfigDiff,
+    PointStruct,
+    VectorParams,
+)
 
 # Required top-level keys
 REQUIRED_KEYS = [
@@ -205,9 +211,15 @@ class Indexer:
                 collection_name=name,
                 vectors_config={
                     self.vector_name: VectorParams(
-                        size=self.vector_size, distance=Distance.COSINE
+                        size=self.vector_size,
+                        distance=Distance.COSINE,
+                        on_disk=True,
                     ),
                 },
+                # Keep vectors + the HNSW graph memory-mapped on disk rather
+                # than RAM-resident, so collections don't pin host RAM.
+                hnsw_config=HnswConfigDiff(on_disk=True),
+                optimizers_config=OptimizersConfigDiff(memmap_threshold=20000),
             )
             print(f"  Created collection: {name}")
 

@@ -14,7 +14,13 @@ from pathlib import Path
 import yaml
 from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    HnswConfigDiff,
+    OptimizersConfigDiff,
+    PointStruct,
+    VectorParams,
+)
 from tqdm import tqdm
 
 # --- GPU detection ---
@@ -296,8 +302,15 @@ def ensure_collection(client: QdrantClient, name: str):
         client.create_collection(
             collection_name=name,
             vectors_config={
-                VECTOR_NAME: VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+                VECTOR_NAME: VectorParams(
+                    size=VECTOR_SIZE, distance=Distance.COSINE, on_disk=True
+                ),
             },
+            # Keep vectors + the HNSW graph memory-mapped on disk rather than
+            # RAM-resident. Large collections (code-work ~670k pts) otherwise
+            # pin multiple GB of host RAM. memmap_threshold spills big segments.
+            hnsw_config=HnswConfigDiff(on_disk=True),
+            optimizers_config=OptimizersConfigDiff(memmap_threshold=20000),
         )
         print(f"  Created collection: {name}")
 

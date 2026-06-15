@@ -6,6 +6,10 @@ services:
     image: qdrant/qdrant:latest
     container_name: qdrant
     restart: unless-stopped
+    # Vectors+HNSW are on_disk (see collection config), so RSS is the hot
+    # working set + payload cache, not the full 3.7GB store. 3g leaves room
+    # for the optimizer's segment-rewrite spikes during indexing.
+    mem_limit: 3g
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:
@@ -32,6 +36,10 @@ services:
       dockerfile: Dockerfile
     container_name: qdrant-mcp
     restart: unless-stopped
+    # Runs 4 mcp-server-qdrant processes, each loading its own MiniLM model
+    # (~250MB resident → ~1g aggregate at idle). 2g leaves headroom for ONNX
+    # arena spikes during concurrent query embedding so we don't OOM-kill.
+    mem_limit: 2g
     ports:
       - '7020:7020'
     volumes:
@@ -58,6 +66,7 @@ services:
       context: ./indexer
       target: cpu
     container_name: obsidian-indexer
+    mem_limit: 2g
     command: ["python", "index_obsidian.py", "--config", "/app/indexer.yaml"]
     volumes:
       - ${VAULT_PATH:-/nonexistent}:/vault:ro
@@ -82,6 +91,7 @@ services:
     image: qdrant-mcp-indexer:cpu
     container_name: obsidian-watcher
     restart: unless-stopped
+    mem_limit: 1g
     command: ["python", "watcher.py", "--config", "/app/watcher.yaml"]
     volumes:
       - ${VAULT_PATH:-/nonexistent}:/vault:ro
@@ -109,6 +119,7 @@ services:
     image: qdrant-mcp-indexer:gpu
     container_name: repo-watcher-work
     restart: unless-stopped
+    mem_limit: 2g
     command: ["python3", "watcher.py", "--config", "/app/watcher.yaml"]
     environment:
       - QDRANT_URL=http://qdrant:6333
@@ -143,6 +154,7 @@ services:
     image: qdrant-mcp-indexer:gpu
     container_name: repo-watcher-public
     restart: unless-stopped
+    mem_limit: 2g
     command: ["python3", "watcher.py", "--config", "/app/watcher.yaml"]
     environment:
       - QDRANT_URL=http://qdrant:6333
@@ -176,6 +188,7 @@ services:
       context: ./indexer
       target: gpu
     container_name: repo-indexer
+    mem_limit: 3g
     command: ["python3", "index_repos.py", "--config", "/app/repos.yaml"]
     environment:
       - QDRANT_URL=http://qdrant:6333
