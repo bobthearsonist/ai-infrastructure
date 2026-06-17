@@ -119,7 +119,10 @@ services:
     image: qdrant-mcp-indexer:gpu
     container_name: repo-watcher-work
     restart: unless-stopped
-    mem_limit: 2g
+    # 4g (not 2g): the one-time cold build re-embeds all ~670k chunks and
+    # pegs ~2g+. Steady-state incremental runs sit far lower; this is
+    # headroom for the initial full reconcile so it doesn't OOM.
+    mem_limit: 4g
     command: ["python3", "watcher.py", "--config", "/app/watcher.yaml"]
     environment:
       - QDRANT_URL=http://qdrant:6333
@@ -127,7 +130,12 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - ${REPOS_BASE:-/nonexistent}:/repos:ro
-      - ./indexer/repos-work.yaml:/app/repos.yaml:ro
+      # Mount under the real name (NOT /app/repos.yaml): index_repos.py
+      # derives its state filename from the config stem, so repos-work.yaml
+      # -> .index_repos_state_work.json (which IS bind-mounted and persists).
+      # Renaming to repos.yaml made it write .index_repos_state.json
+      # (ephemeral) -> state lost on every recreate -> repeated full builds.
+      - ./indexer/repos-work.yaml:/app/repos-work.yaml:ro
       - ./indexer/watcher-repos.yaml:/app/watcher.yaml:ro
       - ./indexer/.index_repos_state_work.json:/app/.index_repos_state_work.json
       - fastembed-cache:/root/.cache/fastembed
@@ -154,7 +162,8 @@ services:
     image: qdrant-mcp-indexer:gpu
     container_name: repo-watcher-public
     restart: unless-stopped
-    mem_limit: 2g
+    # 4g for the one-time cold build (see repo-watcher-work note).
+    mem_limit: 4g
     command: ["python3", "watcher.py", "--config", "/app/watcher.yaml"]
     environment:
       - QDRANT_URL=http://qdrant:6333
@@ -162,7 +171,9 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - ${REPOS_BASE:-/nonexistent}:/repos:ro
-      - ./indexer/repos-public.yaml:/app/repos.yaml:ro
+      # Real name so state persists as .index_repos_state_public.json
+      # (see repo-watcher-work note).
+      - ./indexer/repos-public.yaml:/app/repos-public.yaml:ro
       - ./indexer/watcher-repos-public.yaml:/app/watcher.yaml:ro
       - ./indexer/.index_repos_state_public.json:/app/.index_repos_state_public.json
       - fastembed-cache:/root/.cache/fastembed

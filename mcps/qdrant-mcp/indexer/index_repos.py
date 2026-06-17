@@ -349,8 +349,25 @@ def index_repo(
 
     # Collect files first so tqdm knows the total
     files = list(walk_repo(repo_path, cfg))
+    total = len(files)
+    is_tty = sys.stdout.isatty()
 
-    for fpath in tqdm(files, desc=f"  {repo_name}", unit="file", leave=True):
+    for processed, fpath in enumerate(
+        tqdm(
+            files, desc=f"  {repo_name}", unit="file", leave=True,
+            disable=not is_tty, mininterval=2.0,
+        ),
+        start=1,
+    ):
+        # Plain-text progress for non-TTY (container) logs every 100 files,
+        # since tqdm's \r bar is disabled there. watcher.py streams this live.
+        if not is_tty and (processed % 100 == 0 or processed == total):
+            print(
+                f"  {repo_name}: {processed}/{total} files "
+                f"(indexed={stats['indexed']} unchanged={stats['unchanged']} "
+                f"chunks={stats['chunks']})",
+                flush=True,
+            )
         rel = fpath.relative_to(repo_path)
         rel_str = str(rel)
         state_key = f"{repo_name}::{rel_str}"

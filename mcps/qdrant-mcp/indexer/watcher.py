@@ -14,10 +14,12 @@ command, and timing knobs all come from a YAML config file passed via
 (vault watcher with .md only, repo watcher with ~50 source extensions,
 etc.) without code duplication.
 
-Critical: uses PollingObserver (not native inotify) because Docker
-Desktop on Windows + WSL2 does NOT reliably propagate filesystem
-events across the bind-mount boundary. Polling is slightly more CPU
-but is the only thing that actually works on this host topology.
+Critical: uses stat-based polling (not native inotify) because Docker
+Desktop on Windows + WSL2 does NOT reliably propagate filesystem events
+across the bind-mount boundary. Each poll walks the tree honoring the
+indexer's skip_dirs (so .git / node_modules are never stat'd) and
+triggers a reindex only when a watched file's mtime/size changes.
+Polling is the only thing that actually works on this host topology.
 
 Usage:
     python watcher.py --config /app/watcher.yaml
@@ -27,6 +29,7 @@ See watcher-obsidian.yaml.example for the schema.
 
 import argparse
 import logging
+import os
 import shlex
 import signal
 import subprocess
@@ -37,8 +40,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers.polling import PollingObserver
 
 # ───────────────────────────────────────────────────────────────
 # Config loading
@@ -56,6 +57,34 @@ DEFAULTS: dict[str, Any] = {
     "lockfile": "/app/.watcher.lock",
     "indexer_cwd": "/app",
 }
+
+# Fallback only. The real skip_dirs is read from the indexer's own config
+# (see _indexer_skip_dirs) so the watcher's poll-walk and the indexer's
+# index-walk can never diverge — divergence was the original bug: the
+# observer descended into 88 .git stores the indexer always skipped.
+DEFAULT_SKIP_DIRS = {
+    ".git", "node_modules", "dist", "build", ".venv", "venv",
+    "__pycache__", ".mypy_cache", ".pytest_cache", ".tox", ".eggs",
+    ".next", ".nuxt", "coverage", ".nyc_output",
+}
+
+
+def _indexer_skip_dirs(indexer_cmd: list[str]) -> set[str] | None:
+    """Read skip_dirs from the indexer's --config YAML (single source of
+    truth). Returns None if the config can't be located or parsed."""
+    cfg_path = None
+    for i, tok in enumerate(indexer_cmd):
+        if tok in ("--config", "-c") and i + 1 < len(indexer_cmd):
+            cfg_path = indexer_cmd[i + 1]
+            break
+    if not cfg_path or not Path(cfg_path).exists():
+        return None
+    try:
+        data = yaml.safe_load(Path(cfg_path).read_text()) or {}
+    except Exception:
+        return None
+    sd = data.get("skip_dirs")
+    return set(sd) if sd else None
 
 
 def load_config(path: str) -> dict[str, Any]:
@@ -95,6 +124,14 @@ def load_config(path: str) -> dict[str, Any]:
         )
         sys.exit(1)
     cfg["lockfile"] = Path(cfg["lockfile"])
+
+    # skip_dirs: prefer the indexer's own config (single source of truth),
+    # then an explicit watcher-config key, then sane defaults.
+    cfg["skip_dirs"] = (
+        _indexer_skip_dirs(cfg["indexer_cmd"])
+        or set(cfg.get("skip_dirs", []))
+        or DEFAULT_SKIP_DIRS
+    )
 
     return cfg
 
@@ -168,22 +205,21 @@ class DebouncedTrigger:
             self._lockfile.touch()
             log.info("triggering reindex: %s", " ".join(self._indexer_cmd))
             t0 = time.monotonic()
+            # Inherit stdio so the indexer's progress streams live to the
+            # container's stdout (docker logs) instead of being captured and
+            # hidden until exit. PYTHONUNBUFFERED=1 keeps it real-time.
             result = subprocess.run(
                 self._indexer_cmd,
                 cwd=self._indexer_cwd,
-                capture_output=True,
-                text=True,
             )
             dt = time.monotonic() - t0
             if result.returncode == 0:
                 log.info("reindex complete in %.1fs", dt)
             else:
                 log.error(
-                    "reindex failed (exit %d) in %.1fs\nstdout: %s\nstderr: %s",
+                    "reindex failed (exit %d) in %.1fs (see indexer output above)",
                     result.returncode,
                     dt,
-                    result.stdout[-2000:],
-                    result.stderr[-2000:],
                 )
         finally:
             self._lockfile.unlink(missing_ok=True)
@@ -195,23 +231,29 @@ class DebouncedTrigger:
                 self._timer.cancel()
 
 
-class WatchedEventHandler(FileSystemEventHandler):
-    def __init__(
-        self, trigger: DebouncedTrigger, watched_extensions: set[str]
-    ) -> None:
-        self.trigger = trigger
-        self._extensions = watched_extensions
-
-    def _interesting(self, path: str) -> bool:
-        return Path(path).suffix.lower() in self._extensions
-
-    def on_any_event(self, event) -> None:  # type: ignore[override]
-        if event.is_directory:
-            return
-        if not self._interesting(event.src_path):
-            return
-        log.debug("change detected: %s %s", event.event_type, event.src_path)
-        self.trigger.schedule()
+def take_snapshot(
+    root: Path, extensions: set[str], skip_dirs: set[str]
+) -> dict[str, tuple[float, int]]:
+    """Stat-walk `root`, pruning skip_dirs, returning {path: (mtime, size)}
+    for files whose extension is watched. Metadata only — never reads file
+    contents (that's the indexer's job, only on a detected change)."""
+    snap: dict[str, tuple[float, int]] = {}
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Prune ignored dirs in place so os.walk never descends into them.
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in skip_dirs and not d.endswith(".egg-info")
+        ]
+        for fn in filenames:
+            if Path(fn).suffix.lower() not in extensions:
+                continue
+            fp = os.path.join(dirpath, fn)
+            try:
+                st = os.stat(fp)
+            except OSError:
+                continue
+            snap[fp] = (st.st_mtime, st.st_size)
+    return snap
 
 
 def main() -> int:
@@ -245,11 +287,6 @@ def main() -> int:
     log.info("indexer command: %s", " ".join(cfg["indexer_cmd"]))
 
     trigger = DebouncedTrigger(cfg)
-    handler = WatchedEventHandler(trigger, cfg["watched_extensions"])
-    observer = PollingObserver(timeout=cfg["poll_interval_seconds"])
-    observer.schedule(handler, str(watch_path), recursive=True)
-    observer.start()
-
     stop = threading.Event()
 
     def _shutdown(*_args) -> None:
@@ -259,16 +296,46 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
 
+    poll = cfg["poll_interval_seconds"]
+    extensions = cfg["watched_extensions"]
+    skip_dirs = cfg["skip_dirs"]
+
     try:
-        # Initial reconciliation on startup catches anything that drifted
-        # while the watcher was offline.
+        # Build/refresh the index FIRST so it exists even if the first
+        # snapshot walk is slow — the index build must never be gated behind
+        # change-detection (the old ordering let a slow observer block it).
         log.info("running initial reconciliation pass")
         trigger._run_indexer()  # direct call, bypasses debounce
-        stop.wait()
+
+        # Baseline snapshot AFTER the build: only react to changes that land
+        # once the index is current.
+        t0 = time.monotonic()
+        prev = take_snapshot(watch_path, extensions, skip_dirs)
+        log.info(
+            "baseline snapshot: %d watched files in %.1fs; polling every %ds",
+            len(prev), time.monotonic() - t0, poll,
+        )
+
+        # Stat-poll loop: cheap metadata walk, debounced reindex only on delta.
+        while not stop.is_set():
+            stop.wait(poll)
+            if stop.is_set():
+                break
+            cur = take_snapshot(watch_path, extensions, skip_dirs)
+            if cur != prev:
+                added = cur.keys() - prev.keys()
+                removed = prev.keys() - cur.keys()
+                modified = {
+                    p for p in cur.keys() & prev.keys() if cur[p] != prev[p]
+                }
+                log.info(
+                    "change detected (+%d/-%d/~%d); scheduling reindex",
+                    len(added), len(removed), len(modified),
+                )
+                prev = cur
+                trigger.schedule()
     finally:
         trigger.stop()
-        observer.stop()
-        observer.join(timeout=5)
     return 0
 
 

@@ -77,8 +77,14 @@ watched_extensions:
 indexer_cmd:
   - python3
   - index_repos.py
+  # Mount + reference the config under its REAL name (NOT /app/repos.yaml).
+  # index_repos.py derives its state filename from the config stem, so
+  # repos-work.yaml -> .index_repos_state_work.json, which must be the
+  # bind-mounted (persistent) state file. Renaming to repos.yaml makes it
+  # write .index_repos_state.json (ephemeral) -> state lost on every
+  # recreate -> repeated full re-index instead of fast incremental.
   - --config
-  - /app/repos.yaml
+  - /app/repos-work.yaml
 
 # =============================================================================
 # OPTIONAL: Tuning knobs (defaults shown)
@@ -98,11 +104,11 @@ lockfile: /app/.watcher-repos.lock
 # 300s = 5 minutes — coalesces a full build cycle into one reindex pass.
 debounce_seconds: 300
 
-# Filesystem polling cadence. PollingObserver is required across the
-# Windows host → Linux container bind-mount boundary; inotify won't fire.
-# 5s is less aggressive than the vault watcher's 2s — saves CPU since
-# code repos churn more aggregate filesystem activity than the vault.
-poll_interval_seconds: 5
+# Filesystem stat-poll cadence (watcher.py walks the tree honoring
+# skip_dirs and diffs mtime/size). Polling is required across the Windows
+# host → Linux container bind-mount boundary; inotify won't fire. 30s is
+# plenty for code repos and far less walk load than an aggressive 5s.
+poll_interval_seconds: 30
 
 # Hard floor between consecutive runs even under continuous editing —
 # prevents thrash during build storms (e.g., back-to-back rebuilds while

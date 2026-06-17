@@ -73,8 +73,10 @@ watched_extensions:
 indexer_cmd:
   - python3
   - index_repos.py
+  # Real name (NOT /app/repos.yaml) so state persists as
+  # .index_repos_state_public.json. See watcher-repos.yaml.example.
   - --config
-  - /app/repos.yaml
+  - /app/repos-public.yaml
 
 # =============================================================================
 # OPTIONAL: Tuning knobs (defaults shown)
@@ -87,6 +89,6 @@ indexer_cwd: /app
 lockfile: /app/.watcher-repos-public.lock
 
 debounce_seconds: 300
-poll_interval_seconds: 5
+poll_interval_seconds: 30
 min_interval_seconds: 600
 idle_only: true
