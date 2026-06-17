@@ -8,6 +8,10 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Hosts multiple stdio MCPs as subprocesses (azure-devops, sequential-
+    # thinking, kapture, ...) whose RSS counts here. ~190MB observed; 768m
+    # leaves room for several concurrent servers without OOM-killing the proxy.
+    mem_limit: 768m
     expose:
       - "7030"
       - "61822"  # Kapture WebSocket bridge
@@ -50,6 +54,7 @@ services:
   mcp-status:
     image: alpine:latest
     restart: unless-stopped
+    mem_limit: 64m
     depends_on:
       stdio-proxy:
         condition: service_healthy

@@ -9,6 +9,8 @@ services:
       dockerfile: Dockerfile
     container_name: memory_mcp
     restart: unless-stopped
+    # Knowledge-graph store grows with the graph; ~140MB now, 512m headroom.
+    mem_limit: 512m
     volumes:
       - ./servers.json:/config/servers.json:ro
       - ${MEMORY_DIR}:/data/memory

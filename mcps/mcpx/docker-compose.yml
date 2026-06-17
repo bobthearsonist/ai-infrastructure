@@ -36,6 +36,9 @@ services:
     image: us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest
     container_name: mcpx
     restart: unless-stopped
+    # Gateway process idles ~220MB; 512m caps blast radius without
+    # OOM-killing it under request load.
+    mem_limit: 512m
     privileged: true
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
@@ -75,6 +78,7 @@ services:
     image: lunarapi/lunar-proxy:latest
     container_name: lunar-proxy
     restart: unless-stopped
+    mem_limit: 512m
     ports:
       - "8000:8000" # Main proxy port
       - "8040:8040" # Health check port
@@ -95,6 +99,7 @@ services:
     image: nginx:alpine
     container_name: mcpx-ssl-proxy
     restart: unless-stopped
+    mem_limit: 128m
     ports:
       - "9443:9443" # HTTPS MCPX API port
       - "5443:5443" # HTTPS Control Plane UI port

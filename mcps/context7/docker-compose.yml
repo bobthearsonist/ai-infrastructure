@@ -8,6 +8,7 @@ services:
       dockerfile: Dockerfile
     container_name: context7_mcp
     restart: unless-stopped
+    mem_limit: 256m
     ports:
       - '7008:7008' # Context7 MCP HTTP port
     networks:

@@ -9,6 +9,7 @@ services:
     image: containrrr/watchtower
     container_name: watchtower
     restart: unless-stopped
+    mem_limit: 128m
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
     volumes:

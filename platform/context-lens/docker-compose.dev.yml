@@ -33,11 +33,13 @@ services:
     environment:
       CONTEXT_LENS_BIND_HOST: "0.0.0.0"
       CONTEXT_LENS_MAX_SESSIONS: "${CONTEXT_LENS_MAX_SESSIONS:-1000}"
-      NODE_OPTIONS: "--max-old-space-size=8192"
+      # Heap ceiling sits below the container mem_limit so V8 GCs before
+      # Docker SIGKILLs (measured startup peak ~2.4G loading all sessions).
+      NODE_OPTIONS: "--max-old-space-size=3072"
     deploy:
       resources:
         limits:
-          memory: 10g
+          memory: 3584m
     healthcheck:
       # Build from source (~30s subsequent, ~2 min first) + session data
       # loading (~2-3 min) before the analysis server binds port 4041.

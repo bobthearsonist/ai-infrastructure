@@ -34,11 +34,13 @@ services:
     environment:
       CONTEXT_LENS_BIND_HOST: "0.0.0.0"
       CONTEXT_LENS_MAX_SESSIONS: "1000"
-      NODE_OPTIONS: "--max-old-space-size=8192"
+      # Heap ceiling sits below the container mem_limit so V8 GCs before
+      # Docker SIGKILLs (measured startup peak ~2.4G loading all sessions).
+      NODE_OPTIONS: "--max-old-space-size=3072"
     deploy:
       resources:
         limits:
-          memory: 10g
+          memory: 3584m
     healthcheck:
       # Verify both the reverse proxy (4040) and the web UI / ingest API (4041)
       # are functional. These are separate Node processes — one can crash while
@@ -53,6 +55,7 @@ services:
     image: mitmproxy/mitmproxy:latest
     container_name: context-lens-mitmproxy
     restart: unless-stopped
+    mem_limit: 256m
     # Startup ordering only — mitmproxy does not require context-lens to be
     # healthy. The addon POSTs captures to the ingest API; failures are logged
     # and the intercepted traffic still flows to upstream APIs unaffected.
