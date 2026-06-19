@@ -23,6 +23,8 @@ from qdrant_client.models import (
 )
 from tqdm import tqdm
 
+from chunking import CodeChunker, is_generated, load_jina_tokenizer
+
 # --- GPU detection ---
 
 
@@ -110,9 +112,25 @@ def load_config(config_path: str) -> dict:
     config["index_extensions"] = set(config.get("index_extensions", []))
     config["index_filenames"] = set(config.get("index_filenames", []))
     config.setdefault("max_chunk_chars", 1200)
+    # Files larger than this are treated as generated/data (not searchable
+    # source) and skipped — keeps the index clean and the build fast.
+    config.setdefault("max_file_bytes", 1_000_000)
+    # Token budget per chunk. The AST chunker (chunking.py) bounds every chunk by
+    # real model tokens — the hard guarantee that no chunk can exceed the
+    # embedder's budget regardless of content density. Replaces the char/line
+    # heuristics that were bolted on to stop the embedder stalling.
+    config.setdefault("max_tokens", 512)
     # Allow per-config Qdrant collection. Backwards compatible: old configs
     # without this field continue to write to the legacy "code" collection.
     config.setdefault("qdrant_collection", DEFAULT_COLLECTION_NAME)
+    # Per-config embedding (backwards compatible: defaults to the legacy MiniLM
+    # constants when no `embedding:` block is present). Lets a migration config
+    # (e.g. repos-work-jina.yaml) target a different model + named vector.
+    emb = config.get("embedding", {}) or {}
+    config["embedding_model"] = emb.get("model", EMBEDDING_MODEL)
+    config["vector_size"] = emb.get("vector_size", VECTOR_SIZE)
+    config["vector_name"] = emb.get("vector_name", VECTOR_NAME)
+    config["batch_size"] = emb.get("batch_size")  # None -> use auto-detected
     return config
 
 
@@ -126,9 +144,23 @@ def should_index_file(path: Path, cfg: dict) -> bool:
     name = path.name
     suffix = path.suffix.lower()
 
+    # Skip oversized files (generated/data/minified blobs). Hand-written source
+    # is rarely >1MB; large files explode into thousands of chunks, dominate
+    # embed time, and pollute a code-search index with non-source content.
+    try:
+        if path.stat().st_size > cfg["max_file_bytes"]:
+            return False
+    except OSError:
+        return False
+
     if name in cfg["skip_files"]:
         return False
     if suffix in cfg["skip_extensions"]:
+        return False
+    # Compound extensions: Path.suffix only returns the LAST part, so
+    # '.min.js'/'.min.css'/'.d.ts' skip entries never match via suffix.
+    # Match the full filename so minified/generated vendor files are skipped.
+    if any(name.endswith(ext) for ext in cfg["skip_extensions"]):
         return False
     if name in cfg["index_filenames"]:
         return True
@@ -260,12 +292,22 @@ def chunk_by_paragraphs(content: str, max_chars: int) -> list[str]:
 
 
 def chunk_by_lines(content: str, max_chars: int) -> list[str]:
-    """Last resort: split by lines."""
-    lines = content.split("\n")
+    """Last resort: split by lines, hard-slicing any single line that itself
+    exceeds max_chars. Minified/generated files are one giant line; without
+    this an oversized chunk produces an enormous O(seq^2) attention allocation
+    that OOMs or hangs the embedder (observed 9.6GB buffer + a hang on a Cdp
+    minified file). This is the funnel for every oversized chunk path, so the
+    slice here guarantees no emitted chunk exceeds max_chars."""
     chunks = []
     current = ""
 
-    for line in lines:
+    for line in content.split("\n"):
+        while len(line) > max_chars:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(line[:max_chars])
+            line = line[max_chars:]
         if current and len(current) + len(line) + 1 > max_chars:
             chunks.append(current)
             current = line
@@ -398,8 +440,15 @@ def index_repo(
             stats["skipped"] += 1
             continue
 
+        # Skip auto-generated source (WCF Reference.cs, *.Designer.cs, etc.):
+        # noise in a code-search index. Excluded by what the file IS, not by
+        # size/line-length. Token chunking (below) already prevents any stall.
+        if is_generated(content):
+            stats["skipped"] += 1
+            continue
+
         language = detect_language(fpath)
-        chunks = chunk_code(content, language, max_chars)
+        chunks = cfg["chunker"].chunk(content, language)
 
         if not chunks:
             stats["skipped"] += 1
@@ -489,6 +538,16 @@ def main():
     repos = cfg["repos"]
     collection_name = cfg["qdrant_collection"]
 
+    # Apply per-config embedding by overriding the module-level defaults that
+    # ensure_collection()/index_repo() read. Reassigning the globals keeps the
+    # change minimal (no signature churn) and backwards compatible.
+    global EMBEDDING_MODEL, VECTOR_SIZE, VECTOR_NAME, BATCH_SIZE
+    EMBEDDING_MODEL = cfg["embedding_model"]
+    VECTOR_SIZE = cfg["vector_size"]
+    VECTOR_NAME = cfg["vector_name"]
+    if cfg.get("batch_size"):
+        BATCH_SIZE = cfg["batch_size"]
+
     # State file is per-config so multiple configs (work + public) don't
     # fight over a single state JSON. Use the config stem so
     # repos-work.yaml -> .index_repos_state_work.json,
@@ -526,6 +585,38 @@ def main():
     embedder = TextEmbedding(model_name=EMBEDDING_MODEL, providers=PROVIDERS)
     ensure_collection(client, collection_name)
 
+    # AST/token-aware chunker, bounded by the model's REAL tokenizer. Pull it
+    # from the embedder (FastEmbed loads it internally); use a copy with
+    # truncation disabled so counting/splitting a huge data blob isn't silently
+    # capped at the model's 8192 max. Safe: the chunker guarantees <=max_tokens
+    # chunks, so the embedder itself never sees an over-length input.
+    tokenizer = None
+    src_tok = getattr(getattr(embedder, "model", None), "tokenizer", None)
+    if src_tok is not None:
+        try:
+            from tokenizers import Tokenizer
+
+            tokenizer = Tokenizer.from_str(src_tok.to_str())
+            tokenizer.no_truncation()
+            tokenizer.no_padding()
+        except Exception:
+            tokenizer = src_tok
+    if tokenizer is None:  # last resort: cache glob, then chars/4 estimate
+        tokenizer = load_jina_tokenizer(EMBEDDING_MODEL)
+    if tokenizer is not None:
+        def count_tokens(s):
+            return len(tokenizer.encode(s).ids)
+    else:
+        def count_tokens(s):
+            return max(1, len(s) // 4)
+    cfg["chunker"] = CodeChunker(
+        count_tokens, max_tokens=cfg["max_tokens"], tokenizer=tokenizer
+    )
+    print(
+        f"Chunker: tree-sitter AST | tokenizer="
+        f"{'jina(real)' if tokenizer else 'ESTIMATE(chars/4)'} | max_tokens={cfg['max_tokens']}"
+    )
+
     using_gpu = "CUDAExecutionProvider" in PROVIDERS
     print(f"Providers: {PROVIDERS}")
     print(f"Batch size: {BATCH_SIZE}")
@@ -560,6 +651,11 @@ def main():
             print(f"  {repo_files} files indexed")
         else:
             print(f"  (no changes)")
+
+        # Checkpoint after each repo so a long (~79 min, 678k-chunk) build that
+        # dies partway resumes from the last completed repo instead of zero.
+        if not args.dry_run:
+            save_state(new_state, state_file)
 
     # Clean up deleted files — only from repos in the current config.
     # Files from repos NOT in the config are preserved so that running

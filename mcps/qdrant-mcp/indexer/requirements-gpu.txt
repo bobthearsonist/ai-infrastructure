@@ -1,4 +1,11 @@
 qdrant-client>=1.9.0
-fastembed-gpu>=0.3.0
+# Pinned: unpinned ranges silently pulled a CUDA-13 onnxruntime onto a CUDA-12
+# base on rebuild and broke GPU import. Bump deliberately, together with the
+# base image (Dockerfile). onnxruntime-gpu 1.27 -> CUDA 13.
+fastembed-gpu==0.8.0
+onnxruntime-gpu==1.27.0
 pyyaml>=6.0
 watchdog>=4.0.0
+tree-sitter>=0.23.0
+tree-sitter-language-pack>=0.7.0
+tokenizers>=0.20.0

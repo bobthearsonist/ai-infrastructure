@@ -36,10 +36,13 @@ services:
       dockerfile: Dockerfile
     container_name: qdrant-mcp
     restart: unless-stopped
-    # Runs 4 mcp-server-qdrant processes, each loading its own MiniLM model
-    # (~250MB resident → ~1g aggregate at idle). 2g leaves headroom for ONNX
-    # arena spikes during concurrent query embedding so we don't OOM-kill.
-    mem_limit: 2g
+    # Runs 4 mcp-server-qdrant processes, each loading its own embedding model.
+    # MiniLM was ~250MB each (~1g idle). The per-corpus migration moves these to
+    # 768d models (jina-v2-base-code, nomic-embed-text-v1.5) whose ONNX runtime
+    # footprint is ~2-3x MiniLM, so idle can approach ~2-3g across 4 servers.
+    # 4g leaves headroom for that plus concurrent query-embedding arena spikes.
+    # NOTE: measure actual RSS after cutover; raise further if needed.
+    mem_limit: 4g
     ports:
       - '7020:7020'
     volumes:
@@ -91,7 +94,10 @@ services:
     image: qdrant-mcp-indexer:cpu
     container_name: obsidian-watcher
     restart: unless-stopped
-    mem_limit: 1g
+    # 3g (was 1g): 1g was fine for MiniLM (384d) but nomic-embed-text-v1.5
+    # (768d) CPU embedding peaks well past 1g and OOM-killed (exit 137) the
+    # full vault re-embed. Steady-state incremental note changes sit far lower.
+    mem_limit: 3g
     command: ["python", "watcher.py", "--config", "/app/watcher.yaml"]
     volumes:
       - ${VAULT_PATH:-/nonexistent}:/vault:ro

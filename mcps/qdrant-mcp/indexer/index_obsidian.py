@@ -107,7 +107,7 @@ def get_vault_path() -> Path:
 class Indexer:
     """Obsidian vault indexer with configurable routing."""
 
-    def __init__(self, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any], state_file: str | None = None):
         self.config = config
         self.vault_path = get_vault_path()
         self.qdrant_url = config["qdrant_url"]
@@ -125,7 +125,16 @@ class Indexer:
         self.vector_name = emb["vector_name"]
         self.max_chunk_chars = emb["max_chunk_chars"]
 
-        self.state_file = Path(__file__).parent / ".index_state.json"
+        # State file defaults to .index_state.json (the live watcher's state).
+        # An explicit override lets a parallel/migration build use an isolated
+        # state file so it never clobbers the watcher's incremental tracking
+        # (the obsidian indexer otherwise hardcodes a single shared state file,
+        # unlike index_repos.py which derives it from the config stem).
+        self.state_file = (
+            Path(state_file)
+            if state_file
+            else Path(__file__).parent / ".index_state.json"
+        )
 
     def should_skip(self, rel_path: Path) -> bool:
         """Return True if the file should be excluded from indexing."""
@@ -186,7 +195,42 @@ class Indexer:
                 if current:
                     chunks.append(current)
 
-        return [c for c in chunks if len(c.strip()) > 30]
+        # Hard size cap: header+paragraph splitting can still leave a single
+        # oversized blob (pasted logs, base64, a wide no-blank-line table). An
+        # over-limit chunk produces an enormous O(seq^2) attention allocation
+        # that OOMs the embedder (observed 12-38GB buffer requests on nomic).
+        # MiniLM hid this by silently truncating at 256 tokens; nomic does not.
+        final = []
+        for chunk in chunks:
+            if len(chunk) <= max_chars:
+                final.append(chunk)
+            else:
+                final.extend(self._hard_split(chunk, max_chars))
+
+        return [c for c in final if len(c.strip()) > 30]
+
+    @staticmethod
+    def _hard_split(text: str, max_chars: int) -> list[str]:
+        """Last-resort split so no chunk exceeds max_chars, even with no
+        paragraph breaks. Prefers line boundaries; hard-slices any single line
+        longer than max_chars."""
+        out: list[str] = []
+        current = ""
+        for line in text.split("\n"):
+            while len(line) > max_chars:
+                if current:
+                    out.append(current)
+                    current = ""
+                out.append(line[:max_chars])
+                line = line[max_chars:]
+            if current and len(current) + len(line) + 1 > max_chars:
+                out.append(current)
+                current = line
+            else:
+                current = f"{current}\n{line}" if current else line
+        if current:
+            out.append(current)
+        return out
 
     def load_state(self) -> dict:
         """Load previous indexing state (file hashes)."""
@@ -317,7 +361,11 @@ class Indexer:
             # Generate embeddings
             texts = [f"{title}\n\n{chunk}" for chunk in chunks]
             try:
-                vectors = list(embedder.passage_embed(texts))
+                # Cap batch size: FastEmbed defaults to 256, so a large note
+                # (many chunks) would embed them all in one call and spike
+                # memory — on GPU that OOMs VRAM for big notes. 16 keeps the
+                # per-call footprint bounded regardless of note size.
+                vectors = list(embedder.passage_embed(texts, batch_size=16))
             except Exception as e:
                 print(f"  ERROR embedding {rel}: {e}")
                 stats["errors"] += 1
@@ -371,6 +419,12 @@ class Indexer:
             stats["chunks"] += len(chunks)
             print(f"  [{collection}] {rel} ({len(chunks)} chunks)")
 
+            # Checkpoint state per-file so a killed run (e.g. an OOM during a
+            # large 768d full re-embed) resumes instead of restarting: the next
+            # pass sees completed files as unchanged and skips re-embedding them.
+            if not dry_run:
+                self.save_state(new_state)
+
         # Clean up deleted files
         deleted = set(prev_state.keys()) - current_files
         for del_file in deleted:
@@ -419,10 +473,16 @@ def main():
     parser.add_argument(
         "--dry-run", "-n", action="store_true", help="Preview without writing"
     )
+    parser.add_argument(
+        "--state-file",
+        help="Override the state file path (default: .index_state.json). "
+        "Use a distinct path for a parallel/migration build so it doesn't "
+        "clobber the live watcher's state.",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
-    indexer = Indexer(config)
+    indexer = Indexer(config, state_file=args.state_file)
     indexer.run(force=args.force, dry_run=args.dry_run)
 
 

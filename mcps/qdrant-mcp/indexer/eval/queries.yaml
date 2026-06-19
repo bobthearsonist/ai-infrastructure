@@ -1,0 +1,83 @@
+# A/B retrieval eval query set.
+#
+# Each corpus lists TARGETS (model + the collection it populated) and QUERIES
+# (natural-language search + expected substrings that should appear in a good
+# result's file_path/title/repo/document). ANY listed substring matching counts
+# as a hit. The eval skips a corpus if any of its target collections is missing
+# (so the `code` corpus stays dormant until code-work__jina exists).
+#
+# NOTE (ground truth = your domain knowledge): the seed queries below are
+# derived from notes already in the vault, but the eval is only as honest as
+# this set. Add 5-10 real searches you'd actually run, each with the note/file
+# you'd expect back. Bad/uncertain expectations make recall@k meaningless.
+
+corpora:
+  notes:
+    targets:
+      - label: minilm
+        collection: notes-work
+        model: sentence-transformers/all-MiniLM-L6-v2
+        vector_name: fast-all-minilm-l6-v2
+      - label: nomic
+        collection: notes-work__nomic
+        model: nomic-ai/nomic-embed-text-v1.5
+        vector_name: fast-nomic-embed-text-v1.5
+    queries:
+      - q: "what did we decide about renaming the qdrant collections"
+        expect: ["qdrant graphify infrastructure buildout"]
+      - q: "how did we set up GPU accelerated RAG indexing with qdrant and mcp"
+        expect: ["rag infrastructure for qdrant"]
+      - q: "GPU support with the RTX 4050 indexing speed files per second"
+        expect: ["rag infrastructure for qdrant"]
+      - q: "repo indexer deleted points when repos were commented out of the config"
+        expect: ["qdrant repo indexer final batch"]
+      - q: "match on child attribute indexing design options"
+        expect: ["match on child", "transcript-pointing"]
+      - q: "qdrant-indexer skill documentation restructure progressive disclosure"
+        expect: ["documentation updates post-qdrant"]
+      - q: "plan to upgrade to a larger embedding model like nomic or mxbai"
+        expect: ["qdrant graphify infrastructure buildout"]
+      # TODO(user): add your real recurring searches + expected notes here.
+
+  # Dormant until code-work__jina exists (eval auto-skips missing collections).
+  code:
+    targets:
+      - label: minilm
+        collection: code-work
+        model: sentence-transformers/all-MiniLM-L6-v2
+        vector_name: fast-all-minilm-l6-v2
+      - label: jina
+        collection: code-work__jina
+        model: jinaai/jina-embeddings-v2-base-code
+        vector_name: fast-jina-embeddings-v2-base-code
+    # Derived from real grep history across 127 past sessions (the way we
+    # actually search this code). Mix of easy lookups + "answer is deep in a
+    # big file" cases. expect = substrings matched (case-insensitive) against
+    # result file_path + document text, so symbol names count as hits.
+    # NOTE: skews toward platform grid/UI (recent expandable-cell project), so
+    # this mostly tests TSX-heavy retrieval. Refine/extend as needed.
+    queries:
+      - q: "how to make grid rows expandable to show child records"
+        expect: ["platform", "Expandable"]            # deep-in-big-file
+      - q: "render custom content in grid cells with title customization"
+        expect: ["platform", "renderCell", "makeTitle"]  # deep-in-big-file
+      - q: "membership view grid showing matching members and hierarchy"
+        expect: ["matching", "membership"]            # deep-in-big-file
+      - q: "collapsible tree nodes for hierarchical data display"
+        expect: ["platform", "Collapsible"]           # easy
+      - q: "mark matched child records in the UI with a visual indicator"
+        expect: ["matching", "data-matched"]          # easy
+      - q: "manage row height for virtual scrolling in large grids"
+        expect: ["platform", "rowHeight", "InfiniteGrid"]  # deep-in-big-file
+      - q: "certificate thumbprint validation and configuration storage"
+        expect: ["CertificateThumbprint"]             # easy
+      - q: "entity lock service for concurrent editing"
+        expect: ["EntityLock"]                        # easy
+      - q: "user account types admin regular and windows authentication"
+        expect: ["Account"]                           # deep-in-big-file
+      - q: "expandable cell component for showing child records inline"
+        expect: ["platform", "ExpandableCell"]        # deep-in-big-file
+      - q: "css focus visible styling for keyboard navigation accessibility"
+        expect: ["focus-visible"]                     # easy
+      - q: "resizable grid columns with dynamic width management"
+        expect: ["Resizable"]                         # deep-in-big-file
