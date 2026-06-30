@@ -2,6 +2,12 @@
 
 Semantic search over Obsidian vault content and Git repositories via Qdrant vector database, exposed as MCP tools through mcp-proxy SSE endpoints.
 
+## Documentation
+
+- [Embedding model tuning plan](docs/qdrant-embedding-model-tuning-plan.md) — per-corpus model strategy, migration pattern, staged rollout.
+- [Embedding model comparison](docs/qdrant-embedding-model-comparison.md) — A/B results (MiniLM vs jina for code, vs nomic for prose) + how to reproduce.
+- [RAG & Obsidian improvement roadmap](docs/qdrant-rag-improvements.md) — broader improvement backlog.
+
 ## Architecture
 
 ```plantuml
