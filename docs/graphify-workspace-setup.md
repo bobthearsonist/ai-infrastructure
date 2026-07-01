@@ -256,18 +256,26 @@ Add `graphify-out/` to the repo's `.gitignore` so graph artifacts don't get trac
 
 Both scripts go in `~/.local/bin/` (or wherever your `$PATH` points):
 
-### `graphify-workspace-hook.sh` (workspace pattern)
+### Hook scripts (workspace pattern)
 
-A debounced background hook that calls graphify's internal `_rebuild_code` against the **workspace scan_root** rather than the calling repo. Prefixes changed paths with the repo name so they're workspace-relative.
+Four event hooks share one library, all in `~/.local/bin/` and installed as **copies** into each coupled repo's `.git/hooks/`:
 
-Key behaviors:
-- Reads `scan_root` from `~/ai/local.yaml` via `yq` (fallback: `/c/Repositories`)
-- Skips during rebase/merge/cherry-pick
-- Detects the correct Python interpreter (uv-installed graphifyy)
-- Detached background invocation — `git commit` returns immediately
+- `graphify-workspace-hook.sh` — post-commit + post-checkout
+- `graphify-post-merge-hook.sh` — post-merge (catches `git pull`; diffs `ORIG_HEAD..HEAD`, not `HEAD~1..HEAD`, so multi-commit pulls aren't truncated to the last commit)
+- `graphify-post-rewrite-hook.sh` — post-rewrite (rebase / `commit --amend`)
+- `graphify-hook-lib.sh` — shared POSIX-sh library sourced by the three event hooks
+
+They call graphify's internal `_rebuild_code` against the **workspace scan_root** (not the calling repo) and prefix changed paths with the canonical repo name so they're workspace-relative.
+
+Key behaviors (in the lib):
+- Derives the **canonical** repo name from `git rev-parse --git-common-dir`'s parent (worktree-safe), so changed paths prefix correctly for the workspace graph
+- Reads `scan_root` from `~/ai/local.yaml` via `yq` (fallback `/c/Repositories`)
+- Skips during rebase/merge/cherry-pick; honors `GRAPHIFY_SKIP_HOOK=1`
+- Detects the uv-installed graphifyy Python
+- Detached background rebuild under an mkdir lock (serializes the shared-graph write); `git commit` returns immediately
 - Logs to `~/.cache/graphify-workspace-rebuild.log`
 
-Full source maintained at `~/.local/bin/graphify-workspace-hook.sh` — copy to each coupled repo's hook location.
+Source-of-truth is `~/.local/bin/`; re-deploy the copies with `graphify-hooks-rollout.sh`.
 
 ### `graphify-ast-build.py` (initial builds, AST-only)
 
