@@ -76,5 +76,5 @@ services:
         # --- Dev servers ---
         concurrently -k -n tsc,srv,ui -c blue,green,magenta \
           "npx tsc --watch --preserveWatchOutput" \
-          "nodemon --delay 1 --watch dist dist/cli.js -- --no-open" \
+          "nodemon --delay 1 --exitcrash --watch dist dist/cli.js -- --no-open" \
           "cd ui && pnpm dev --host 0.0.0.0"
