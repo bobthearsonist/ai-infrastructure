@@ -627,7 +627,24 @@ def main():
     stats = {"skipped": 0, "indexed": 0, "unchanged": 0, "errors": 0, "chunks": 0}
     current_keys = set()
 
-    # Index repos from repos_base
+    # Index repos from repos_base, smallest first.
+    #
+    # The loop is sequential, so one large repo blocks every smaller one behind
+    # it: platform is ~11k files, which made the other 22 repos wait most of an
+    # hour to see their own changes land. Ordering smallest-first does not make
+    # the run shorter, but it means a small repo's edits are searchable in
+    # minutes instead of after the big walk finishes.
+    #
+    # Size is estimated from the previous state file, whose keys are
+    # "<repo>::<relpath>" and which is already in memory — no extra walk. Repos
+    # absent from it sort first: they are new or have never been indexed, and
+    # both cases want prompt attention rather than being queued behind platform.
+    repo_file_counts = {}
+    for state_key in prev_state:
+        known_repo = state_key.split("::", 1)[0]
+        repo_file_counts[known_repo] = repo_file_counts.get(known_repo, 0) + 1
+    repos = sorted(repos, key=lambda name: repo_file_counts.get(name, 0))
+
     for repo_name in repos:
         repo_path = repos_base / repo_name
         if not repo_path.exists():
