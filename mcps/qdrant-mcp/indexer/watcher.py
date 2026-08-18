@@ -56,7 +56,16 @@ DEFAULTS: dict[str, Any] = {
     "idle_only": True,
     "lockfile": "/app/.watcher.lock",
     "indexer_cwd": "/app",
+    "lock_stale_seconds": 7200,
 }
+
+# A lockfile older than this is assumed to be orphaned by a crashed run
+# rather than held by a live indexer. The lockfile lives in the container's
+# writable layer, so a hard kill (OOM, docker kill, host reboot) skips the
+# finally-block that would remove it AND survives a container restart —
+# which silently froze the work-code index for 30 days. 2h is deliberately
+# generous: the longest observed successful run was 801s.
+DEFAULT_LOCK_STALE_SECONDS = 7200
 
 # Fallback only. The real skip_dirs is read from the indexer's own config
 # (see _indexer_skip_dirs) so the watcher's poll-walk and the indexer's
@@ -163,6 +172,9 @@ class DebouncedTrigger:
         self._indexer_cmd = cfg["indexer_cmd"]
         self._indexer_cwd = cfg["indexer_cwd"]
         self._lockfile = cfg["lockfile"]
+        self._lock_stale = cfg.get(
+            "lock_stale_seconds", DEFAULT_LOCK_STALE_SECONDS
+        )
 
     def schedule(self) -> None:
         with self._lock:
@@ -195,12 +207,33 @@ class DebouncedTrigger:
             self._last_run_at = time.monotonic()
         self._run_indexer()
 
+    def _lock_age_seconds(self) -> float | None:
+        """Age of the lockfile in seconds, or None if it can't be stat'd
+        (it vanished under us, or the stat failed). None is treated as
+        'not stale' by the caller — the conservative choice, and it
+        self-heals on the next poll."""
+        try:
+            return max(0.0, time.time() - self._lockfile.stat().st_mtime)
+        except OSError:
+            return None
+
     def _run_indexer(self) -> None:
         if self._lockfile.exists():
+            age = self._lock_age_seconds()
+            if age is None or age <= self._lock_stale:
+                log.warning(
+                    "lockfile present; another indexer run in progress, skipping"
+                )
+                return
+            # Past the TTL: no live run lasts this long, so the holder died
+            # without unlinking. Reclaim it instead of blocking forever.
             log.warning(
-                "lockfile present; another indexer run in progress, skipping"
+                "lockfile is %.1fh old (> %.1fh TTL); assuming it was orphaned "
+                "by a crashed run, removing it and proceeding",
+                age / 3600.0,
+                self._lock_stale / 3600.0,
             )
-            return
+            self._lockfile.unlink(missing_ok=True)
         try:
             self._lockfile.touch()
             log.info("triggering reindex: %s", " ".join(self._indexer_cmd))
