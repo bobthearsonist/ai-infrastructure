@@ -710,7 +710,11 @@ def main():
         print()
 
     # Initialize
-    client = QdrantClient(url=qdrant_url)
+    # Explicit timeout: the client default is 5s, which a per-file delete of a
+    # large point set can exceed whenever another indexer is hitting the same
+    # Qdrant. The work and public watchers now overlap where they used to
+    # serialise, so that ceiling became reachable and aborted whole runs.
+    client = QdrantClient(url=qdrant_url, timeout=120)
     embedder = TextEmbedding(model_name=EMBEDDING_MODEL, providers=PROVIDERS)
     ensure_collection(client, collection_name)
 
