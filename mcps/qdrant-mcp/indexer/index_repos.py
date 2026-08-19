@@ -2,6 +2,7 @@
 """Index Git repositories into a Qdrant 'code' collection."""
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -329,7 +330,38 @@ def load_state(state_file: Path) -> dict:
 
 def save_state(state: dict, state_file: Path):
     """Persist indexing state."""
-    state_file.write_text(json.dumps(state, indent=2))
+    # Serialize before touching the target: a formatting error then cannot leave
+    # the live file truncated.
+    payload = json.dumps(state, indent=2)
+
+    # Prefer temp+rename over truncate-in-place: this file is the resume point
+    # for a ~79 min build, so a crash mid-write would cost the entire run's
+    # progress. os.replace is atomic within a volume, and the temp lives beside
+    # the target so it is the same volume. The PID in the temp name keeps two
+    # concurrent runs from writing the same scratch path and handing each other
+    # a partial file.
+    tmp_file = state_file.with_name(f"{state_file.name}.{os.getpid()}.tmp")
+    try:
+        tmp_file.write_text(payload)
+        os.replace(tmp_file, state_file)
+        return
+    except OSError as exc:
+        tmp_file.unlink(missing_ok=True)
+        if exc.errno != errno.EBUSY:
+            raise
+    except BaseException:
+        tmp_file.unlink(missing_ok=True)
+        raise
+
+    # EBUSY means the target is an individual bind-mounted file, which the
+    # container topology requires: the state file is mounted by name so it
+    # survives container recreates (a wrong path here previously caused repeated
+    # full rebuilds). The kernel refuses rename(2) onto an active mount point, so
+    # write through the existing inode instead. This is NOT atomic - a kill
+    # mid-write leaves truncated JSON - but load_state treats an unparseable file
+    # as absent, which costs a full reindex rather than producing wrong data.
+    # Atomicity here would require bind-mounting the enclosing directory.
+    state_file.write_text(payload)
 
 
 def make_point_id(repo: str, file_path: str, chunk_index: int) -> str:
@@ -388,6 +420,131 @@ def index_repo(
     """Index a single repository. Returns count of files indexed."""
     max_chars = cfg["max_chunk_chars"]
     repo_files = 0
+
+    # Chunks accumulate ACROSS files and are embedded in a single call once the
+    # buffer reaches BATCH_SIZE. Embedding per file handed the GPU a handful of
+    # chunks and then left it idle through the next file's stat/read/chunk work
+    # — utilisation sampled every 2s during a live run read 0%, 0%, 85%, 0%, 85%.
+    # Buffering keeps the device fed while the CPU prepares the next files.
+    #
+    # Each buffered entry keeps its OWN chunk list, because point ids are
+    # make_point_id(repo, rel, chunk_index) and chunk_index must stay per-FILE:
+    # a batch-wide counter would generate ids that overwrite the previous file's
+    # points. Nothing is recorded in new_state until that file's vectors have
+    # actually been upserted.
+    pending = []  # per-file dicts awaiting embed + upsert
+    pending_chunks = 0  # total chunks currently buffered
+
+    def write_file_points(pf: dict, vectors: list):
+        """Upsert one file's points, then record its state.
+
+        Only ever called once that file's vectors exist. Recording state at
+        buffer-add time would mark a file indexed whose vectors a later batch
+        failure never wrote — the next run would skip it as unchanged and its
+        content would be silently missing from the index.
+        """
+        nonlocal repo_files
+        rel_str = pf["rel_str"]
+        file_chunks = pf["chunks"]
+
+        points = []
+        # i is the index within THIS file, not within the batch.
+        for i, (chunk, vector) in enumerate(zip(file_chunks, vectors)):
+            point_id = make_point_id(repo_name, rel_str, i)
+            points.append(
+                PointStruct(
+                    id=point_id,
+                    vector={VECTOR_NAME: vector.tolist()},
+                    payload={
+                        "document": chunk,
+                        "metadata": {
+                            "repo": repo_name,
+                            "file_path": rel_str,
+                            "language": pf["language"],
+                            "chunk_index": i,
+                            "total_chunks": len(file_chunks),
+                            "collection": collection_name,
+                            "last_modified": pf["last_modified"],
+                        },
+                    },
+                )
+            )
+
+        if not dry_run:
+            # Delete old points first (chunk count may have changed)
+            old_count = pf["old_chunks"]
+            if old_count > 0:
+                old_ids = [
+                    make_point_id(repo_name, rel_str, i) for i in range(old_count)
+                ]
+                client.delete(collection_name=collection_name, points_selector=old_ids)
+
+            # Batch upserts to stay under Qdrant's 32MB payload limit
+            UPSERT_BATCH = 100
+            for bi in range(0, len(points), UPSERT_BATCH):
+                client.upsert(
+                    collection_name=collection_name,
+                    points=points[bi : bi + UPSERT_BATCH],
+                )
+
+        new_state[pf["state_key"]] = {"hash": pf["hash"], "chunks": len(file_chunks)}
+        stats["indexed"] += 1
+        stats["chunks"] += len(file_chunks)
+        repo_files += 1
+
+    def embed_each(batch: list):
+        """Re-embed a failed batch one file at a time.
+
+        Error policy: one bad file must not cost the other ~255 good ones. On a
+        batch-level failure every file is retried individually, so only the file
+        that actually fails is dropped and counted — identical to the per-file
+        behaviour before batching. A dropped file is absent from new_state, so
+        the next run sees it as new and retries it.
+        """
+        for pf in batch:
+            try:
+                vectors = list(
+                    embedder.passage_embed(pf["texts"], batch_size=BATCH_SIZE)
+                )
+            except Exception as e:
+                print(f"  ERROR embedding {pf['rel_str']}: {e}")
+                stats["errors"] += 1
+                continue
+            write_file_points(pf, vectors)
+
+    def flush():
+        """Embed everything buffered in one call, then write it out per file."""
+        nonlocal pending_chunks
+        if not pending:
+            return
+        batch = list(pending)
+        pending.clear()
+        pending_chunks = 0
+
+        texts = [t for pf in batch for t in pf["texts"]]
+        try:
+            vectors = list(embedder.passage_embed(texts, batch_size=BATCH_SIZE))
+        except Exception as e:
+            print(f"  ERROR embedding batch of {len(batch)} files: {e}")
+            embed_each(batch)
+            return
+
+        # Vectors are split back out by position, so a short return would pair
+        # the wrong vector with the wrong chunk and poison the index silently.
+        # Refuse to guess; fall back to the per-file path.
+        if len(vectors) != len(texts):
+            print(
+                f"  ERROR batch embed returned {len(vectors)} vectors for "
+                f"{len(texts)} chunks; re-embedding files individually"
+            )
+            embed_each(batch)
+            return
+
+        offset = 0
+        for pf in batch:
+            n = len(pf["chunks"])
+            write_file_points(pf, vectors[offset : offset + n])
+            offset += n
 
     # Collect files first so tqdm knows the total
     files = list(walk_repo(repo_path, cfg))
@@ -458,59 +615,31 @@ def index_repo(
         context_prefix = f"{repo_name}/{rel_str}"
         texts = [f"{context_prefix}\n\n{chunk}" for chunk in chunks]
 
-        try:
-            vectors = list(embedder.passage_embed(texts, batch_size=BATCH_SIZE))
-        except Exception as e:
-            print(f"  ERROR embedding {rel}: {e}")
-            stats["errors"] += 1
-            continue
+        pending.append(
+            {
+                "state_key": state_key,
+                "rel_str": rel_str,
+                "hash": h,
+                "language": language,
+                "chunks": chunks,
+                "texts": texts,
+                "old_chunks": prev_state.get(state_key, {}).get("chunks", 0),
+                # Stat now, while the file is known-good, rather than at flush
+                # time: a file removed between buffering and flushing would
+                # otherwise raise and take the whole batch with it.
+                "last_modified": datetime.fromtimestamp(
+                    fpath.stat().st_mtime, tz=timezone.utc
+                ).isoformat(),
+            }
+        )
+        pending_chunks += len(chunks)
 
-        points = []
-        for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
-            point_id = make_point_id(repo_name, rel_str, i)
-            points.append(
-                PointStruct(
-                    id=point_id,
-                    vector={VECTOR_NAME: vector.tolist()},
-                    payload={
-                        "document": chunk,
-                        "metadata": {
-                            "repo": repo_name,
-                            "file_path": rel_str,
-                            "language": language,
-                            "chunk_index": i,
-                            "total_chunks": len(chunks),
-                            "collection": collection_name,
-                            "last_modified": datetime.fromtimestamp(
-                                fpath.stat().st_mtime, tz=timezone.utc
-                            ).isoformat(),
-                        },
-                    },
-                )
-            )
+        if pending_chunks >= BATCH_SIZE:
+            flush()
 
-        if not dry_run:
-            # Delete old points first (chunk count may have changed)
-            old = prev_state.get(state_key, {})
-            old_count = old.get("chunks", 0)
-            if old_count > 0:
-                old_ids = [
-                    make_point_id(repo_name, rel_str, i) for i in range(old_count)
-                ]
-                client.delete(collection_name=collection_name, points_selector=old_ids)
-
-            # Batch upserts to stay under Qdrant's 32MB payload limit
-            UPSERT_BATCH = 100
-            for bi in range(0, len(points), UPSERT_BATCH):
-                client.upsert(
-                    collection_name=collection_name,
-                    points=points[bi : bi + UPSERT_BATCH],
-                )
-
-        new_state[state_key] = {"hash": h, "chunks": len(chunks)}
-        stats["indexed"] += 1
-        stats["chunks"] += len(chunks)
-        repo_files += 1
+    # Flush the tail before returning, so the caller's per-repo save_state
+    # checkpoint only ever records files whose vectors are already written.
+    flush()
 
     return repo_files
 
