@@ -18,6 +18,16 @@ RUN npm install -g @modelcontextprotocol/server-memory@${SERVER_MEMORY_VERSION}
 COPY patch-atomic-write.cjs /patch/patch-atomic-write.cjs
 RUN node /patch/patch-atomic-write.cjs
 
+# Report probable duplicate entities on create. Upstream dedupes on exact name
+# equality, which cannot see the duplicates that actually occur: "Context Lens"
+# vs "context-lens", or two entities sharing 47% of their observation text under
+# names sharing no tokens at all. Advisory only - it changes no control flow,
+# because an exact-name collision upstream drops the entity and its observations
+# silently rather than merging them, so matching more loosely would lose data.
+# Same fail-the-build-on-anchor-drift contract as the patch above.
+COPY patch-dedupe-warn.cjs /patch/patch-dedupe-warn.cjs
+RUN node /patch/patch-dedupe-warn.cjs
+
 # Copy server configuration (compose also bind-mounts this read-only)
 COPY servers.json /config/servers.json
 
