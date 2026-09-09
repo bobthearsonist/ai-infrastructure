@@ -1,0 +1,26 @@
+# Auth-injecting reverse proxy for the SonarQube MCP server.
+# The MCP server's HTTP transport requires `Authorization: Bearer <token>` on
+# every request; the gateways (mcpx / agentgateway) connect URL-only and cannot
+# safely carry the secret. This sidecar injects it so no gateway config holds a token.
+#
+# nginx:alpine runs envsubst over /etc/nginx/templates/*.template at startup,
+# substituting ONLY defined env vars — ${SONARQUBE_TOKEN} is filled from the
+# container env (mcps/sonarqube/.env); $host etc. are left for nginx at runtime.
+
+server {
+    listen 80;
+
+    location / {
+        proxy_pass http://sonarqube-mcp:8080;
+        proxy_set_header Authorization "Bearer ${SONARQUBE_TOKEN}";
+        proxy_set_header Host $host;
+        proxy_http_version 1.1;
+
+        # Streamable-HTTP/SSE: stream immediately, don't buffer, keep long-lived.
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_set_header Connection "";
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}

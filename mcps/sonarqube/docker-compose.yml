@@ -1,0 +1,83 @@
+name: sonarqube-mcp
+
+services:
+  # SonarQube MCP Server - SonarCloud issues & quality gates for the
+  # Profisee org (project key: profisee_platform).
+  # Streamable-HTTP transport so MCPX federates it over the shared network,
+  # mirroring context7_mcp / memory_mcp rather than the stdio-proxy path
+  # (the stdio-proxy has no docker socket and this image is Java/Docker-only).
+  # https://github.com/SonarSource/sonarqube-mcp-server
+  sonarqube-mcp:
+    image: sonarsource/sonarqube-mcp:latest
+    container_name: sonarqube_mcp
+    restart: unless-stopped
+    pull_policy: always   # match upstream's `docker run --pull=always` guidance
+    # The JVM is container-aware and takes MaxRAMPercentage (default 25%) of
+    # this limit as max heap -- so 512m gave it only a 128m heap, which OOM'd
+    # while downloading the javascript/kotlin analyzers on every boot. The OOM
+    # landed on the httpclient-dispatch-N threads (the Apache HttpClient5 async
+    # I/O reactor's workers); the JVM survived, the container stayed "Up", and
+    # the reactor later died outright -- 15h of silent 100% failure. 2g => 512m
+    # heap. Do not lower this without checking `java -XX:+PrintFlagsFinal`.
+    mem_limit: 2g
+    environment:
+      - SONARQUBE_TRANSPORT=http
+      - SONARQUBE_HTTP_PORT=8080
+      # Bind all interfaces: the server defaults to 127.0.0.1, which is
+      # unreachable from MCPX in another container. 0.0.0.0 exposes it on
+      # the ai-shared network only (no host port is published).
+      - SONARQUBE_HTTP_HOST=0.0.0.0
+      - SONARQUBE_MCP_IN_CONTAINER=true
+      # SONARQUBE_ORG present => SonarCloud (vs self-hosted Server).
+      - SONARQUBE_ORG=${SONARQUBE_ORG:-profisee}
+      # :? => compose refuses to start (clear error) if the token is absent,
+      # instead of launching a server that 401s on every request.
+      - SONARQUBE_TOKEN=${SONARQUBE_TOKEN:?set SONARQUBE_TOKEN in mcps/sonarqube/.env or your shell env}
+    # No host ports published — reachable only in-network as sonarqube_mcp:8080.
+    #
+    # This deliberately calls a real tool rather than probing the port. The
+    # failure mode we actually hit keeps the HTTP listener perfectly responsive
+    # while every outbound call to sonarcloud.io fails, so `nc -z` (the pattern
+    # used by the sibling stacks) reports green through a total outage. Only a
+    # request that forces the server to reach SonarCloud can see it.
+    # list_quality_gates is the cheapest such tool and needs no arguments.
+    # $$ escapes compose interpolation so the container shell expands these.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          R=$$(wget -q -O - --header="Authorization: Bearer $$SONARQUBE_TOKEN" --header="Content-Type: application/json" --header="Accept: application/json, text/event-stream" --post-data='{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_quality_gates","arguments":{}}}' http://localhost:8080/mcp) || exit 1; case "$$R" in *'"isError":true'*) exit 1;; *jsonrpc*) exit 0;; *) exit 1;; esac
+      # 5m keeps daily calls to the SonarCloud API modest (~288); with 3 retries
+      # a real outage surfaces in ~15m. The bug this replaces went 15h unseen.
+      interval: 5m
+      timeout: 30s
+      retries: 3
+      # Covers boot + background analyzer download (~55s observed at 512m).
+      start_period: 180s
+    networks:
+      - ai-infrastructure
+
+  # Auth-injecting reverse proxy. The MCP server's HTTP transport requires
+  # `Authorization: Bearer <token>` on every request, but the gateways connect
+  # URL-only and cannot safely carry the secret. This sidecar adds the header
+  # so no gateway config holds a token — the token lives only in this stack's
+  # .env, filled into nginx.auth.conf.template via envsubst at startup.
+  # Gateways point HERE (sonarqube_auth / sonarqube-auth), not at the server.
+  sonarqube-auth:
+    image: nginx:alpine
+    container_name: sonarqube_auth
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      - SONARQUBE_TOKEN=${SONARQUBE_TOKEN:?set SONARQUBE_TOKEN in mcps/sonarqube/.env or your shell env}
+    volumes:
+      - ./nginx.auth.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      - sonarqube-mcp
+    networks:
+      - ai-infrastructure
+
+networks:
+  ai-infrastructure:
+    name: ai-shared
+    external: true
