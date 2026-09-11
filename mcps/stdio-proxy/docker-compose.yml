@@ -17,6 +17,12 @@ services:
       - "61822"  # Kapture WebSocket bridge
     volumes:
       - ${SERVERS_CONFIG:-./servers.json}:/config/servers.json:ro
+      # Persist the npx/uvx download cache across restarts. Without it every
+      # boot re-resolves each `npx -y` entry against the registry, so a new
+      # upstream release lands inside the container with no local change to
+      # explain it — pin versions in servers.*.json as well, not instead.
+      # Each including stack gets its own project-scoped copy of this volume.
+      - npm-cache:/root/.npm
     env_file:
       # Per-machine secrets for any named server that needs env (e.g. hass-mcp
       # needs HA_URL + HA_TOKEN, propagated via --pass-environment). Optional;
@@ -55,9 +61,13 @@ services:
     image: alpine:latest
     restart: unless-stopped
     mem_limit: 64m
+    # service_started, NOT service_healthy. This logger exists to report which
+    # named servers are up, so gating it on the proxy being healthy blinded it
+    # exactly when its output matters most. It already handles an unreachable
+    # proxy ("⚠️ proxy unreachable"), so let it start and report the outage.
     depends_on:
       stdio-proxy:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ${SERVERS_CONFIG:-./servers.json}:/config/servers.json:ro
     command: >
@@ -82,6 +92,11 @@ services:
         sleep 30;
       done
       '
+
+volumes:
+  # npx/uvx package cache for stdio-proxy. Declared here rather than in each
+  # gateway stack so every `include:` of this file inherits it.
+  npm-cache:
 
 # NOTE: adb-proxy runs separately from mcps/adb-mcp/docker-compose.yml
 # Start it with: cd ../adb-mcp && docker-compose up -d adb-proxy

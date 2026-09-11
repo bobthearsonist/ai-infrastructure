@@ -1,9 +1,16 @@
 # stdio-proxy: Multiple stdio MCP servers exposed via SSE
 # Supports both Node.js (npx) and Python (uvx) based MCPs
+# Deliberately :latest. Rebuild with `docker compose build --pull` — a plain
+# build reuses the cached base layer and silently stays on an old release.
 FROM ghcr.io/sparfenyuk/mcp-proxy:latest
 
-# Install Node.js for npx-based MCP servers
-RUN apk add --no-cache nodejs npm
+# Install Node.js for npx-based MCP servers.
+# libsecret is required at *require* time by keytar, which @azure-devops/mcp
+# pulls in transitively via @azure/msal-node-extensions (absent in 2.7.0, present by 2.10.0).
+# keytar dlopens libsecret-1.so.0; on Alpine that file is absent, node aborts
+# with ERR_DLOPEN_FAILED, and mcp-proxy -- which initialises every named server
+# eagerly and fatally -- exits 1, taking the healthy servers down with it.
+RUN apk add --no-cache nodejs npm libsecret
 
 # Install Python and uv for Python-based MCP servers
 ENV PATH="/root/.local/bin:$PATH"

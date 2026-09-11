@@ -1,4 +1,5 @@
 {
+  "_comment": "Baseline servers common to all machines. Deliberately unpinned: npx -y resolves 'latest' on every container start, which is what keeps these current. That does mean a new upstream release can land with no local change to explain it -- @azure-devops/mcp once picked up keytar this way, which needs libsecret (installed in the Dockerfile) and otherwise dies at require time. The blast radius is now one server, not the stack: mcpx and mcp-status start alongside the proxy instead of gating on its health. If a server goes missing, check 'docker compose logs mcp-status' for the red mark, then the proxy logs for the child's own error.",
   "mcpServers": {
     "sequential-thinking": {
       "command": "npx",
