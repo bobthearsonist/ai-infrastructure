@@ -16,6 +16,16 @@ Image: `us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest` (0.4.x li
 | Control Plane UI     | `localhost:5173/dashboard`   | `localhost:5443`            |
 | Metrics (Prometheus) | `localhost:3100`             | —                           |
 
+## Connecting Claude Code
+
+Claude Code connects natively over streamable HTTP (no `mcp-remote` bridge). The `x-lunar-consumer-tag` header selects the `claude-code` consumer in `app.yaml`:
+
+```bash
+claude mcp add -t http -s user mcpx http://127.0.0.1:9000/mcp -H "x-lunar-consumer-tag: claude-code"
+```
+
+Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `::1` first, where `wslrelay` holds `:9000` and resets the connection. Other clients: see [clients/](../../clients/readme.md).
+
 ## Backends (mcp.json)
 
 | Server                | Group              | Transport         | URL / Source                                                  |
