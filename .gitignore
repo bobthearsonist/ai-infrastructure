@@ -16,6 +16,10 @@ clients/**/.claude
 clients/**/.yaml
 clients/**/.yml
 
+# Portable hook bundle, not personal client configuration
+!clients/graphify-hooks/.claude/
+!clients/graphify-hooks/.claude/settings.json
+
 # IDE / Editor
 .history/
 .vscode/

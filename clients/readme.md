@@ -2,6 +2,13 @@
 
 Configuration for connecting AI clients to the MCP infrastructure.
 
+## Shared Workspace Hooks
+
+The [graphify hook bundle](graphify-hooks/.claude/hooks/README.md) contains
+portable Claude Code and Copilot CLI reminders, deployment instructions, and a
+deterministic regression suite. These are workspace settings, not plugin hooks;
+updating them does not require a plugin version bump.
+
 ## MCP Config File Locations
 
 Where each client stores its MCP server configuration.
