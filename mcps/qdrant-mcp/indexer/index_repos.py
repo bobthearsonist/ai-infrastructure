@@ -774,6 +774,11 @@ def index_repo(
     return repo_files
 
 
+# Per-repo cleanup deleting more than half the indexed files, and at least this
+# many, is held back unless --allow-mass-delete is given.
+MASS_DELETE_MIN = 50
+
+
 def main():
     parser = argparse.ArgumentParser(description="Index Git repositories into Qdrant")
     parser.add_argument(
@@ -783,6 +788,14 @@ def main():
         "--force", action="store_true", help="Full re-index (ignore state)"
     )
     parser.add_argument("--dry-run", action="store_true", help="No writes to Qdrant")
+    parser.add_argument(
+        "--allow-mass-delete",
+        action="store_true",
+        help=(
+            f"Delete even when a repo would lose more than half of its indexed "
+            f"files (and at least {MASS_DELETE_MIN})"
+        ),
+    )
     args = parser.parse_args()
 
     qdrant_url = os.environ.get("QDRANT_URL")
@@ -838,10 +851,17 @@ def main():
         print("Mode: DRY RUN (no writes)")
     print()
 
-    # Validate repos exist
+    # A wrong mount makes every repo look gone, and cleanup would then delete
+    # all of their points. Refuse to run rather than treat that as a real change.
+    if not repos_base.is_dir():
+        print(f"Error: repos_base does not exist: {repos_base}")
+        sys.exit(1)
     missing = [r for r in repos if not (repos_base / r).exists()]
+    if len(missing) == len(repos):
+        print(f"Error: none of the configured repos exist under {repos_base}")
+        sys.exit(1)
     if missing:
-        print(f"WARNING: Missing repos: {', '.join(missing)}")
+        print(f"WARNING: Missing repos (state kept, not cleaned up): {', '.join(missing)}")
         print()
 
     # Initialize
@@ -883,10 +903,12 @@ def main():
         repo_file_counts[known_repo] = repo_file_counts.get(known_repo, 0) + 1
     repos = sorted(repos, key=lambda name: repo_file_counts.get(name, 0))
 
+    # Missing repos are dropped here so they fall outside active_repos below and
+    # keep their state, like repos that are not in the config.
+    repos = [r for r in repos if (repos_base / r).exists()]
+
     for repo_name in repos:
         repo_path = repos_base / repo_name
-        if not repo_path.exists():
-            continue
 
         print(f"[{repo_name}]")
         repo_files = index_repo(
@@ -925,6 +947,24 @@ def main():
     active_repos = set(repos)
     prev_active = {k for k in prev_state if k.split("::", 1)[0] in active_repos}
     deleted = prev_active - current_keys
+
+    # Circuit breaker: a repo losing most of its files at once is far more
+    # likely a bad checkout or mount than a real change. Keep its state so the
+    # points are not orphaned and the next run can still clean them up.
+    if not args.allow_mass_delete:
+        for repo_name in sorted(active_repos):
+            prev_repo = {k for k in prev_active if k.split("::", 1)[0] == repo_name}
+            gone = {k for k in deleted if k.split("::", 1)[0] == repo_name}
+            if len(gone) >= MASS_DELETE_MIN and len(gone) * 2 > len(prev_repo):
+                print(
+                    f"WARNING: [{repo_name}] would delete {len(gone)} of "
+                    f"{len(prev_repo)} indexed files; skipping deletions. "
+                    f"Re-run with --allow-mass-delete if this is intended."
+                )
+                deleted -= gone
+                for key in gone:
+                    new_state[key] = prev_state[key]
+
     for del_key in deleted:
         old = prev_state[del_key]
         parts = del_key.split("::", 1)

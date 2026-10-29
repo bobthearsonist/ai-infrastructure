@@ -361,6 +361,11 @@ See `indexer.yaml.example` for all options. Key settings:
 9. Upserts with named vector `fast-all-minilm-l6-v2` and metadata payload
 10. Cleans up points for deleted files
 
+Deletion guard: a run that finds no indexable files while the state file lists some
+exits non-zero without deleting anything or writing state. If a run would delete more
+than half of the indexed files and at least 50, it skips every deletion and keeps their
+state entries; pass `--allow-mass-delete` to apply them.
+
 #### The unrouted-vault gap
 
 **Known gap, not a bug — but it loses data silently.** The live `indexer.yaml` on this
@@ -646,6 +651,12 @@ python index_repos.py --dry-run
    **not** the 384d MiniLM vector the notes indexer uses
 8. Upserts with deterministic point IDs: `UUID5(repo::filepath::chunk_index)`
 9. Cleans up points for deleted files
+
+Deletion guard: a missing `repos_base`, or none of the configured repos existing, exits
+non-zero before Qdrant or state is touched. A configured repo whose directory is missing
+is skipped and its state entries are kept. If a repo would lose more than half of its
+indexed files and at least 50, its deletions are skipped and the entries kept; pass
+`--allow-mass-delete` to apply them.
 
 ### Metadata
 

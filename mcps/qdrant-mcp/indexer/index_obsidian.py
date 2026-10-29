@@ -49,6 +49,11 @@ REQUIRED_EMBEDDING_KEYS = [
 ]
 
 
+# Deleting more than half the indexed files, and at least this many, in one
+# run is held back unless --allow-mass-delete is given.
+MASS_DELETE_MIN = 50
+
+
 def load_config(config_path: str | None) -> dict[str, Any]:
     """Load configuration from YAML file. All keys must be explicitly configured."""
     if config_path is None:
@@ -274,7 +279,12 @@ class Indexer:
             )
             print(f"  Created collection: {name}")
 
-    def run(self, force: bool = False, dry_run: bool = False):
+    def run(
+        self,
+        force: bool = False,
+        dry_run: bool = False,
+        allow_mass_delete: bool = False,
+    ):
         """Run the indexing process."""
         if not self.vault_path.exists():
             print(f"Vault not found at {self.vault_path}")
@@ -438,8 +448,35 @@ class Indexer:
             if not dry_run:
                 self.save_state({**prev_state, **new_state})
 
+        # An empty or wrong vault (e.g. a bind mount whose source is missing)
+        # would otherwise read as every note being deleted.
+        if prev_state and not current_files:
+            print(
+                f"Error: no indexable markdown files found in {self.vault_path} "
+                f"but {len(prev_state)} are in the state file; refusing to delete"
+            )
+            sys.exit(1)
+
         # Clean up deleted files
         deleted = set(prev_state.keys()) - current_files
+
+        # Circuit breaker: losing most of the vault at once is far more likely a
+        # wrong or damaged vault than a real change. Keep the state so the points
+        # are not orphaned and a later run can still clean them up.
+        if (
+            not allow_mass_delete
+            and len(deleted) >= MASS_DELETE_MIN
+            and len(deleted) * 2 > len(prev_state)
+        ):
+            print(
+                f"WARNING: would delete {len(deleted)} of {len(prev_state)} indexed "
+                f"files; skipping deletions. "
+                f"Re-run with --allow-mass-delete if this is intended."
+            )
+            for key in deleted:
+                new_state[key] = prev_state[key]
+            deleted = set()
+
         for del_file in deleted:
             old = prev_state[del_file]
             old_collection = old.get("collection")
@@ -494,11 +531,21 @@ def main():
         "Use a distinct path for a parallel/migration build so it doesn't "
         "clobber the live watcher's state.",
     )
+    parser.add_argument(
+        "--allow-mass-delete",
+        action="store_true",
+        help=f"Delete even when more than half of the indexed files (and at "
+        f"least {MASS_DELETE_MIN}) would be removed",
+    )
     args = parser.parse_args()
 
     config = load_config(args.config)
     indexer = Indexer(config, state_file=args.state_file)
-    indexer.run(force=args.force, dry_run=args.dry_run)
+    indexer.run(
+        force=args.force,
+        dry_run=args.dry_run,
+        allow_mass_delete=args.allow_mass_delete,
+    )
 
 
 if __name__ == "__main__":
