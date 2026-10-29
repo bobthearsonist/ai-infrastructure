@@ -15,11 +15,13 @@
 watch_path: /repos
 
 # =============================================================================
-# REQUIRED: File extensions that trigger reindex (case-insensitive)
+# OPTIONAL: Fallback file extensions that trigger reindex (case-insensitive)
 # =============================================================================
-# Mirrors index_extensions from repos.yaml — anything outside this set is
-# ignored so build artifacts, lockfiles, binaries, and IDE churn don't
-# trigger no-op reindexes. Leading dot is optional ("py" and ".py" both work).
+# Not needed here: the file filter comes from the indexer config (the
+# --config in indexer_cmd) — its skip/index rules and max_file_bytes — so
+# build artifacts, lockfiles, oversized files and IDE churn never wake the
+# watcher. This list is used only when the indexer config is neither a repo
+# nor a vault config. Leading dot is optional ("py" and ".py" both work).
 watched_extensions:
   - .py
   - .ts

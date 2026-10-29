@@ -14,11 +14,13 @@
 watch_path: /vault
 
 # =============================================================================
-# REQUIRED: File extensions that trigger reindex (case-insensitive)
+# OPTIONAL: Fallback file extensions that trigger reindex (case-insensitive)
 # =============================================================================
-# Anything outside this set is ignored — keeps .obsidian/ churn and
-# attachment writes from triggering no-op reindexes.
-# Leading dot is optional ("md" and ".md" both work).
+# Not needed here: the file filter comes from the indexer config (the
+# --config in indexer_cmd), so only .md notes that are outside skip_dirs and
+# inside a routed folder (or any folder when skip_unrouted is false) wake the
+# watcher. This list is used only when the indexer config is neither a repo
+# nor a vault config. Leading dot is optional ("md" and ".md" both work).
 watched_extensions:
   - .md
 

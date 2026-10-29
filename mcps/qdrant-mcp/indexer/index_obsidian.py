@@ -30,6 +30,8 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from filters import vault_name_indexable, vault_route, vault_skipped
+
 # Required top-level keys
 REQUIRED_KEYS = [
     "qdrant_url",
@@ -144,21 +146,11 @@ class Indexer:
 
     def should_skip(self, rel_path: Path) -> bool:
         """Return True if the file should be excluded from indexing."""
-        parts = rel_path.parts
-        return any(part in self.skip_dirs for part in parts)
+        return vault_skipped(rel_path, self.skip_dirs)
 
     def route_collection(self, rel_path: Path) -> str | None:
         """Determine which collection a file belongs to based on its path."""
-        top_folder = rel_path.parts[0] if rel_path.parts else ""
-
-        for collection, prefixes in self.routing.items():
-            for prefix in prefixes:
-                if top_folder == prefix:
-                    return collection
-
-        if self.skip_unrouted:
-            return None
-        return self.default_collection
+        return vault_route(rel_path, self.config)
 
     @staticmethod
     def file_hash(path: Path) -> str:
@@ -327,7 +319,9 @@ class Indexer:
         # attachments). We log + skip non-files defensively so a future
         # vault corruption surfaces in the logs instead of crashing
         # file_hash() with IsADirectoryError.
-        md_paths = sorted(self.vault_path.rglob("*.md"))
+        md_paths = sorted(
+            p for p in self.vault_path.rglob("*.md") if vault_name_indexable(p.name)
+        )
         print(f"Found {len(md_paths)} markdown name matches")
 
         # Track which files still exist (for cleanup)

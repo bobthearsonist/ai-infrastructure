@@ -11,15 +11,16 @@ existing hash-diff logic for incremental work.
 This watcher is generic: the watched path, file extensions, indexer
 command, and timing knobs all come from a YAML config file passed via
 --config. That lets a single image power multiple watcher instances
-(vault watcher with .md only, repo watcher with ~50 source extensions,
-etc.) without code duplication.
+(vault watcher, repo watcher, etc.) without code duplication.
 
 Critical: uses stat-based polling (not native inotify) because Docker
 Desktop on Windows + WSL2 does NOT reliably propagate filesystem events
 across the bind-mount boundary. Each poll walks the same roots and
 skip_dirs the indexer does (its config's repos, or watch_path when it
-lists none), so .git / node_modules and unindexed repos are never stat'd,
-and triggers a reindex only when a watched file's mtime/size changes.
+lists none), so .git / node_modules and unindexed repos are never stat'd.
+Files are filtered with the indexer's own rules (filters.py), so a reindex
+triggers only when a file the indexer would index changes mtime/size;
+watched_extensions is the fallback for indexer configs of neither kind.
 Polling is the only thing that actually works on this host topology.
 
 Usage:
@@ -37,17 +38,20 @@ import subprocess
 import sys
 import threading
 import time
+from stat import S_ISREG
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, NamedTuple
 
 import yaml
+
+import filters
 
 # ───────────────────────────────────────────────────────────────
 # Config loading
 # ───────────────────────────────────────────────────────────────
 
 # Required top-level keys — no sensible default exists for these.
-REQUIRED_KEYS = ["watch_path", "watched_extensions", "indexer_cmd"]
+REQUIRED_KEYS = ["watch_path", "indexer_cmd"]
 
 # Defaults for tuning knobs — overridable in YAML.
 DEFAULTS: dict[str, Any] = {
@@ -108,6 +112,53 @@ def _indexer_roots(indexer_cfg: dict) -> list[Path] | None:
     return [Path(base).expanduser() / r for r in repos]
 
 
+class FileFilter(NamedTuple):
+    """Which files a snapshot keeps. name_ok is the cheap check on
+    (root, dirpath, filename); stat_ok runs only on names that pass it."""
+
+    description: str
+    skip_dir: Callable[[str], bool]
+    name_ok: Callable[[Path, str, str], bool]
+    stat_ok: Callable[[os.stat_result], bool]
+
+
+def _build_file_filter(
+    indexer_cfg: dict, extensions: set[str], skip_dirs: set[str]
+) -> FileFilter | None:
+    """The filter matching what the indexer indexes: its repo or vault rules
+    when its config is one, else the watched_extensions fallback (None when
+    that is empty too)."""
+    if filters.is_repo_config(indexer_cfg):
+        flt = filters.normalize_repo_filter(indexer_cfg)
+        return FileFilter(
+            "indexer repo filter (filters.py)",
+            lambda d: filters.should_skip_dir(d, flt),
+            lambda root, dirpath, fn: filters.should_index_name(fn, flt),
+            lambda st: filters.should_index_stat(st, flt),
+        )
+    if filters.is_vault_config(indexer_cfg):
+        vault_skip = set(indexer_cfg["skip_dirs"] or [])
+
+        def vault_name_ok(root: Path, dirpath: str, fn: str) -> bool:
+            rel = Path(dirpath, fn).relative_to(root)
+            return filters.vault_indexable(rel, indexer_cfg)
+
+        return FileFilter(
+            "indexer vault filter (filters.py)",
+            lambda d: d in vault_skip,
+            vault_name_ok,
+            lambda st: S_ISREG(st.st_mode),
+        )
+    if extensions:
+        return FileFilter(
+            f"watched_extensions fallback {sorted(extensions)}",
+            lambda d: d in skip_dirs or d.endswith(".egg-info"),
+            lambda root, dirpath, fn: Path(fn).suffix.lower() in extensions,
+            lambda st: True,
+        )
+    return None
+
+
 def load_config(path: str) -> dict[str, Any]:
     """Load watcher config from YAML. Required keys must be present."""
     config_file = Path(path)
@@ -132,9 +183,9 @@ def load_config(path: str) -> dict[str, Any]:
 
     # Normalize types
     cfg["watch_path"] = Path(cfg["watch_path"])
-    cfg["watched_extensions"] = {
+    exts = {
         ext.lower() if ext.startswith(".") else f".{ext.lower()}"
-        for ext in cfg["watched_extensions"]
+        for ext in cfg.get("watched_extensions") or []
     }
     # indexer_cmd may be a list (preferred) or a string (we'll shlex-split)
     if isinstance(cfg["indexer_cmd"], str):
@@ -155,6 +206,14 @@ def load_config(path: str) -> dict[str, Any]:
         or DEFAULT_SKIP_DIRS
     )
     cfg["watch_roots"] = _indexer_roots(indexer_cfg) or [cfg["watch_path"]]
+    cfg["file_filter"] = _build_file_filter(indexer_cfg, exts, cfg["skip_dirs"])
+    if cfg["file_filter"] is None:
+        print(
+            "Error: indexer config is neither a repo nor a vault config, so "
+            "watched_extensions is required",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     return cfg
 
@@ -279,30 +338,41 @@ class DebouncedTrigger:
 
 
 def take_snapshot(
-    roots: list[Path], extensions: set[str], skip_dirs: set[str]
+    roots: list[Path], flt: FileFilter
 ) -> dict[str, tuple[float, int]]:
-    """Stat-walk each root, pruning skip_dirs, returning {path: (mtime, size)}
-    for files whose extension is watched. Metadata only — never reads file
+    """Stat-walk each root, pruning skipped dirs, returning {path: (mtime,
+    size)} for files the filter accepts. Metadata only — never reads file
     contents (that's the indexer's job, only on a detected change). A root
     that doesn't exist yet contributes nothing until it appears."""
     snap: dict[str, tuple[float, int]] = {}
     for root in roots:
         for dirpath, dirnames, filenames in os.walk(root):
             # Prune ignored dirs in place so os.walk never descends into them.
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in skip_dirs and not d.endswith(".egg-info")
-            ]
+            dirnames[:] = [d for d in dirnames if not flt.skip_dir(d)]
             for fn in filenames:
-                if Path(fn).suffix.lower() not in extensions:
+                # Name checks first: every stat is a round trip to the host
+                # filesystem on a Docker Desktop bind mount.
+                if not flt.name_ok(root, dirpath, fn):
                     continue
                 fp = os.path.join(dirpath, fn)
                 try:
                     st = os.stat(fp)
                 except OSError:
                     continue
-                snap[fp] = (st.st_mtime, st.st_size)
+                if flt.stat_ok(st):
+                    snap[fp] = (st.st_mtime, st.st_size)
     return snap
+
+
+def _sample_paths(added: set[str], removed: set[str], modified: set[str]) -> str:
+    """Up to 5 changed paths, marked +/-/~, for the change-detected line."""
+    marked = (
+        [f"+{p}" for p in sorted(added)]
+        + [f"-{p}" for p in sorted(removed)]
+        + [f"~{p}" for p in sorted(modified)]
+    )
+    more = len(marked) - 5
+    return ", ".join(marked[:5]) + (f", ... (+{more} more)" if more > 0 else "")
 
 
 def main() -> int:
@@ -325,9 +395,9 @@ def main() -> int:
         return 1
 
     log.info(
-        "starting watcher: path=%s extensions=%s debounce=%ds poll=%ds idle_only=%s min_interval=%ds",
+        "starting watcher: path=%s filter=%s debounce=%ds poll=%ds idle_only=%s min_interval=%ds",
         watch_path,
-        sorted(cfg["watched_extensions"]),
+        cfg["file_filter"].description,
         cfg["debounce_seconds"],
         cfg["poll_interval_seconds"],
         cfg["idle_only"],
@@ -350,8 +420,7 @@ def main() -> int:
     signal.signal(signal.SIGINT, _shutdown)
 
     poll = cfg["poll_interval_seconds"]
-    extensions = cfg["watched_extensions"]
-    skip_dirs = cfg["skip_dirs"]
+    flt: FileFilter = cfg["file_filter"]
 
     try:
         # Build/refresh the index FIRST so it exists even if the first
@@ -363,7 +432,7 @@ def main() -> int:
         # Baseline snapshot AFTER the build: only react to changes that land
         # once the index is current.
         t0 = time.monotonic()
-        prev = take_snapshot(roots, extensions, skip_dirs)
+        prev = take_snapshot(roots, flt)
         log.info(
             "baseline snapshot: %d watched files in %.1fs; polling every %ds",
             len(prev), time.monotonic() - t0, poll,
@@ -374,7 +443,7 @@ def main() -> int:
             stop.wait(poll)
             if stop.is_set():
                 break
-            cur = take_snapshot(roots, extensions, skip_dirs)
+            cur = take_snapshot(roots, flt)
             if cur != prev:
                 added = cur.keys() - prev.keys()
                 removed = prev.keys() - cur.keys()
@@ -382,8 +451,9 @@ def main() -> int:
                     p for p in cur.keys() & prev.keys() if cur[p] != prev[p]
                 }
                 log.info(
-                    "change detected (+%d/-%d/~%d); scheduling reindex",
+                    "change detected (+%d/-%d/~%d): %s; scheduling reindex",
                     len(added), len(removed), len(modified),
+                    _sample_paths(added, removed, modified),
                 )
                 prev = cur
                 trigger.schedule()

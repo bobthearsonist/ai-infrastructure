@@ -15,8 +15,11 @@
 watch_path: /repos
 
 # =============================================================================
-# REQUIRED: File extensions that trigger reindex (case-insensitive)
+# OPTIONAL: Fallback file extensions that trigger reindex (case-insensitive)
 # =============================================================================
+# Not needed here: the file filter comes from the indexer config (the
+# --config in indexer_cmd). Used only when that config is neither a repo
+# nor a vault config.
 watched_extensions:
   - .py
   - .ts

@@ -737,7 +737,7 @@ not the whole of `watch_path`, so the poll covers exactly what the indexer reads
 
 Each sidecar config file (`watcher-*.yaml`) defines:
 - `watch_path` — where in the container to watch
-- `watched_extensions` — file extensions that wake the watcher
+- `watched_extensions` — optional fallback: file extensions that wake the watcher when the indexer config is neither a repo nor a vault config. Otherwise the file filter comes from the indexer config (`filters.py`), so only changes to files the indexer would index wake the watcher
 - `indexer_cmd` — command to run on debounced trigger
 - `debounce_seconds`, `min_interval_seconds`, `poll_interval_seconds`, `idle_only` — tuning knobs
 - `lockfile` — distinct per sidecar so concurrent watchers don't fight

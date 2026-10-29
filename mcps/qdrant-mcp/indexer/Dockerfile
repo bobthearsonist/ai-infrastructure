@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY index_obsidian.py .
 COPY index_repos.py .
 COPY chunking.py .
+COPY filters.py .
 COPY watcher.py .
 
 # ---- GPU target ----
@@ -37,6 +38,7 @@ RUN pip install --no-cache-dir --break-system-packages -r requirements-gpu.txt
 COPY index_obsidian.py .
 COPY index_repos.py .
 COPY chunking.py .
+COPY filters.py .
 COPY watcher.py .
 
 ENV NVIDIA_VISIBLE_DEVICES=all

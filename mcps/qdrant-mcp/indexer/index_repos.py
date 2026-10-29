@@ -11,7 +11,6 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from stat import S_ISREG
 
 import yaml
 from fastembed import TextEmbedding
@@ -26,6 +25,12 @@ from qdrant_client.models import (
 from tqdm import tqdm
 
 from chunking import CodeChunker, is_generated, load_jina_tokenizer
+from filters import (
+    normalize_repo_filter,
+    should_index_name,
+    should_index_stat,
+    should_skip_dir as _should_skip_dir,
+)
 
 # --- GPU detection ---
 
@@ -108,15 +113,8 @@ def load_config(config_path: str) -> dict:
     with open(path) as f:
         config = yaml.safe_load(f)
     config["repos_base"] = Path(config["repos_base"]).expanduser()
-    config["skip_dirs"] = set(config.get("skip_dirs", []))
-    config["skip_files"] = set(config.get("skip_files", []))
-    config["skip_extensions"] = set(config.get("skip_extensions", []))
-    config["index_extensions"] = set(config.get("index_extensions", []))
-    config["index_filenames"] = set(config.get("index_filenames", []))
+    config.update(normalize_repo_filter(config))
     config.setdefault("max_chunk_chars", 1200)
-    # Files larger than this are treated as generated/data (not searchable
-    # source) and skipped — keeps the index clean and the build fast.
-    config.setdefault("max_file_bytes", 1_000_000)
     # Token budget per chunk. The AST chunker (chunking.py) bounds every chunk by
     # real model tokens — the hard guarantee that no chunk can exceed the
     # embedder's budget regardless of content density. Replaces the char/line
@@ -138,30 +136,13 @@ def load_config(config_path: str) -> dict:
 
 def should_skip_dir(name: str, cfg: dict) -> bool:
     """Return True if directory should be skipped."""
-    return name in cfg["skip_dirs"] or name.endswith(".egg-info")
+    return _should_skip_dir(name, cfg)
 
 
 def should_index_file(path: Path, cfg: dict) -> bool:
     """Return True if the file's name marks it as indexable. Size and file
     type need a stat, which walk_repo does only for files that pass this."""
-    name = path.name
-    suffix = path.suffix.lower()
-
-    if name in cfg["skip_files"]:
-        return False
-    if suffix in cfg["skip_extensions"]:
-        return False
-    # Compound extensions: Path.suffix only returns the LAST part, so
-    # '.min.js'/'.min.css'/'.d.ts' skip entries never match via suffix.
-    # Match the full filename so minified/generated vendor files are skipped.
-    if any(name.endswith(ext) for ext in cfg["skip_extensions"]):
-        return False
-    if name in cfg["index_filenames"]:
-        return True
-    if suffix in cfg["index_extensions"]:
-        return True
-
-    return False
+    return should_index_name(path.name, cfg)
 
 
 def detect_language(path: Path) -> str:
@@ -489,11 +470,7 @@ def walk_repo(repo_path: Path, cfg: dict):
                 st = fpath.stat()
             except OSError:  # broken symlink, or removed since the listing
                 continue
-            # Regular-file guard: a directory named like source would raise
-            # IsADirectoryError on read. Oversized files are generated/data/
-            # minified blobs that explode into thousands of chunks, dominate
-            # embed time, and pollute a code-search index.
-            if not S_ISREG(st.st_mode) or st.st_size > cfg["max_file_bytes"]:
+            if not should_index_stat(st, cfg):
                 continue
             yield fpath, st
 
