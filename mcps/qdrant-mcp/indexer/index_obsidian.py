@@ -130,10 +130,11 @@ class Indexer:
         # state file so it never clobbers the watcher's incremental tracking
         # (the obsidian indexer otherwise hardcodes a single shared state file,
         # unlike index_repos.py which derives it from the config stem).
+        # INDEXER_STATE_DIR keeps the default out of the source tree, which the
+        # repo watchers poll: a save there looks like a code change to them.
+        state_dir = Path(os.environ.get("INDEXER_STATE_DIR") or Path(__file__).parent)
         self.state_file = (
-            Path(state_file)
-            if state_file
-            else Path(__file__).parent / ".index_state.json"
+            Path(state_file) if state_file else state_dir / ".index_state.json"
         )
 
     def should_skip(self, rel_path: Path) -> bool:
@@ -233,10 +234,16 @@ class Indexer:
         return out
 
     def load_state(self) -> dict:
-        """Load previous indexing state (file hashes)."""
-        if self.state_file.exists():
+        """Load previous indexing state (file hashes). A missing or unparseable
+        file is empty state: save_state writes in place, so a kill mid-write
+        can truncate it, and raising would fail every later run."""
+        if not self.state_file.exists():
+            return {}
+        try:
             return json.loads(self.state_file.read_text())
-        return {}
+        except json.JSONDecodeError as exc:
+            print(f"WARNING: unreadable state file {self.state_file} ({exc}); starting empty")
+            return {}
 
     def save_state(self, state: dict):
         """Persist indexing state."""
@@ -286,7 +293,9 @@ class Indexer:
 
         # Initialize
         client = QdrantClient(url=self.qdrant_url)
-        embedder = TextEmbedding(model_name=self.embedding_model)
+        # Loaded on the first file that needs embedding: a run where nothing
+        # changed never pays for the model.
+        embedder = None
 
         for collection in self.collections:
             self.ensure_collection(client, collection)
@@ -360,6 +369,8 @@ class Indexer:
 
             # Generate embeddings
             texts = [f"{title}\n\n{chunk}" for chunk in chunks]
+            if embedder is None:
+                embedder = TextEmbedding(model_name=self.embedding_model)
             try:
                 # Cap batch size: FastEmbed defaults to 256, so a large note
                 # (many chunks) would embed them all in one call and spike
@@ -422,8 +433,10 @@ class Indexer:
             # Checkpoint state per-file so a killed run (e.g. an OOM during a
             # large 768d full re-embed) resumes instead of restarting: the next
             # pass sees completed files as unchanged and skips re-embedding them.
+            # Overlaid on prev_state so files this run has not reached yet keep
+            # their entries; without them the next run re-embeds them all.
             if not dry_run:
-                self.save_state(new_state)
+                self.save_state({**prev_state, **new_state})
 
         # Clean up deleted files
         deleted = set(prev_state.keys()) - current_files
@@ -445,7 +458,9 @@ class Indexer:
                 )
             print(f"  DELETED {del_file}")
 
-        if not dry_run:
+        # Skip the write when nothing changed. --force ignored the file on
+        # disk, so prev_state is not what is there; always write then.
+        if not dry_run and (force or new_state != prev_state):
             self.save_state(new_state)
 
         # Summary

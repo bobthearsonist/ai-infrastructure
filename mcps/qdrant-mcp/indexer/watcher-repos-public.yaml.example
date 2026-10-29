@@ -74,7 +74,8 @@ indexer_cmd:
   - python3
   - index_repos.py
   # Real name (NOT /app/repos.yaml) so state persists as
-  # .index_repos_state_public.json. See watcher-repos.yaml.example.
+  # $INDEXER_STATE_DIR/.index_repos_state_public.json. See
+  # watcher-repos.yaml.example.
   - --config
   - /app/repos-public.yaml
 

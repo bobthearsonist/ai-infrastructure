@@ -16,9 +16,10 @@ etc.) without code duplication.
 
 Critical: uses stat-based polling (not native inotify) because Docker
 Desktop on Windows + WSL2 does NOT reliably propagate filesystem events
-across the bind-mount boundary. Each poll walks the tree honoring the
-indexer's skip_dirs (so .git / node_modules are never stat'd) and
-triggers a reindex only when a watched file's mtime/size changes.
+across the bind-mount boundary. Each poll walks the same roots and
+skip_dirs the indexer does (its config's repos, or watch_path when it
+lists none), so .git / node_modules and unindexed repos are never stat'd,
+and triggers a reindex only when a watched file's mtime/size changes.
 Polling is the only thing that actually works on this host topology.
 
 Usage:
@@ -68,7 +69,7 @@ DEFAULTS: dict[str, Any] = {
 DEFAULT_LOCK_STALE_SECONDS = 7200
 
 # Fallback only. The real skip_dirs is read from the indexer's own config
-# (see _indexer_skip_dirs) so the watcher's poll-walk and the indexer's
+# (see _indexer_config) so the watcher's poll-walk and the indexer's
 # index-walk can never diverge — divergence was the original bug: the
 # observer descended into 88 .git stores the indexer always skipped.
 DEFAULT_SKIP_DIRS = {
@@ -78,22 +79,33 @@ DEFAULT_SKIP_DIRS = {
 }
 
 
-def _indexer_skip_dirs(indexer_cmd: list[str]) -> set[str] | None:
-    """Read skip_dirs from the indexer's --config YAML (single source of
-    truth). Returns None if the config can't be located or parsed."""
+def _indexer_config(indexer_cmd: list[str]) -> dict:
+    """Read the indexer's --config YAML (single source of truth for what the
+    indexer walks). Returns {} if the config can't be located or parsed."""
     cfg_path = None
     for i, tok in enumerate(indexer_cmd):
         if tok in ("--config", "-c") and i + 1 < len(indexer_cmd):
             cfg_path = indexer_cmd[i + 1]
             break
     if not cfg_path or not Path(cfg_path).exists():
-        return None
+        return {}
     try:
-        data = yaml.safe_load(Path(cfg_path).read_text()) or {}
+        return yaml.safe_load(Path(cfg_path).read_text()) or {}
     except Exception:
+        return {}
+
+
+def _indexer_roots(indexer_cfg: dict) -> list[Path] | None:
+    """The repo directories the indexer walks (repos_base/<repo>), or None
+    when its config doesn't list repos (the vault indexer walks one tree).
+
+    Polling only these keeps the walk the same size as what is indexed: the
+    shared repos_base also holds worktrees and unindexed repos, which made
+    each poll stat ~20x more files than the indexer would ever read."""
+    base, repos = indexer_cfg.get("repos_base"), indexer_cfg.get("repos")
+    if not base or not repos:
         return None
-    sd = data.get("skip_dirs")
-    return set(sd) if sd else None
+    return [Path(base).expanduser() / r for r in repos]
 
 
 def load_config(path: str) -> dict[str, Any]:
@@ -134,13 +146,15 @@ def load_config(path: str) -> dict[str, Any]:
         sys.exit(1)
     cfg["lockfile"] = Path(cfg["lockfile"])
 
-    # skip_dirs: prefer the indexer's own config (single source of truth),
-    # then an explicit watcher-config key, then sane defaults.
+    # skip_dirs and walk roots: prefer the indexer's own config (single source
+    # of truth), then an explicit watcher-config key, then sane defaults.
+    indexer_cfg = _indexer_config(cfg["indexer_cmd"])
     cfg["skip_dirs"] = (
-        _indexer_skip_dirs(cfg["indexer_cmd"])
+        set(indexer_cfg.get("skip_dirs") or [])
         or set(cfg.get("skip_dirs", []))
         or DEFAULT_SKIP_DIRS
     )
+    cfg["watch_roots"] = _indexer_roots(indexer_cfg) or [cfg["watch_path"]]
 
     return cfg
 
@@ -265,27 +279,29 @@ class DebouncedTrigger:
 
 
 def take_snapshot(
-    root: Path, extensions: set[str], skip_dirs: set[str]
+    roots: list[Path], extensions: set[str], skip_dirs: set[str]
 ) -> dict[str, tuple[float, int]]:
-    """Stat-walk `root`, pruning skip_dirs, returning {path: (mtime, size)}
+    """Stat-walk each root, pruning skip_dirs, returning {path: (mtime, size)}
     for files whose extension is watched. Metadata only — never reads file
-    contents (that's the indexer's job, only on a detected change)."""
+    contents (that's the indexer's job, only on a detected change). A root
+    that doesn't exist yet contributes nothing until it appears."""
     snap: dict[str, tuple[float, int]] = {}
-    for dirpath, dirnames, filenames in os.walk(root):
-        # Prune ignored dirs in place so os.walk never descends into them.
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in skip_dirs and not d.endswith(".egg-info")
-        ]
-        for fn in filenames:
-            if Path(fn).suffix.lower() not in extensions:
-                continue
-            fp = os.path.join(dirpath, fn)
-            try:
-                st = os.stat(fp)
-            except OSError:
-                continue
-            snap[fp] = (st.st_mtime, st.st_size)
+    for root in roots:
+        for dirpath, dirnames, filenames in os.walk(root):
+            # Prune ignored dirs in place so os.walk never descends into them.
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in skip_dirs and not d.endswith(".egg-info")
+            ]
+            for fn in filenames:
+                if Path(fn).suffix.lower() not in extensions:
+                    continue
+                fp = os.path.join(dirpath, fn)
+                try:
+                    st = os.stat(fp)
+                except OSError:
+                    continue
+                snap[fp] = (st.st_mtime, st.st_size)
     return snap
 
 
@@ -318,6 +334,10 @@ def main() -> int:
         cfg["min_interval_seconds"],
     )
     log.info("indexer command: %s", " ".join(cfg["indexer_cmd"]))
+    roots: list[Path] = cfg["watch_roots"]
+    missing = [str(r) for r in roots if not r.is_dir()]
+    log.info("walking %d root(s)%s", len(roots),
+             f"; not present yet: {', '.join(missing)}" if missing else "")
 
     trigger = DebouncedTrigger(cfg)
     stop = threading.Event()
@@ -343,7 +363,7 @@ def main() -> int:
         # Baseline snapshot AFTER the build: only react to changes that land
         # once the index is current.
         t0 = time.monotonic()
-        prev = take_snapshot(watch_path, extensions, skip_dirs)
+        prev = take_snapshot(roots, extensions, skip_dirs)
         log.info(
             "baseline snapshot: %d watched files in %.1fs; polling every %ds",
             len(prev), time.monotonic() - t0, poll,
@@ -354,7 +374,7 @@ def main() -> int:
             stop.wait(poll)
             if stop.is_set():
                 break
-            cur = take_snapshot(watch_path, extensions, skip_dirs)
+            cur = take_snapshot(roots, extensions, skip_dirs)
             if cur != prev:
                 added = cur.keys() - prev.keys()
                 removed = prev.keys() - cur.keys()

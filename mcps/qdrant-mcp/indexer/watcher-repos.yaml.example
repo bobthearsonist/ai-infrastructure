@@ -79,10 +79,10 @@ indexer_cmd:
   - index_repos.py
   # Mount + reference the config under its REAL name (NOT /app/repos.yaml).
   # index_repos.py derives its state filename from the config stem, so
-  # repos-work.yaml -> .index_repos_state_work.json, which must be the
-  # bind-mounted (persistent) state file. Renaming to repos.yaml makes it
-  # write .index_repos_state.json (ephemeral) -> state lost on every
-  # recreate -> repeated full re-index instead of fast incremental.
+  # repos-work.yaml -> $INDEXER_STATE_DIR/.index_repos_state_work.json.
+  # Renaming to repos.yaml switches it to .index_repos_state.json, an empty
+  # state -> a full re-index instead of fast incremental. The watcher also
+  # reads repos_base + repos from this config and polls only those repos.
   - --config
   - /app/repos-work.yaml
 

@@ -353,12 +353,13 @@ See `indexer.yaml.example` for all options. Key settings:
 1. Reads config from `indexer.yaml` (or command-line `--config`)
 2. Walks vault for `.md` files, skipping excluded directories
 3. Routes files to collections based on `routing` rules
-4. Skips unchanged files (tracked via `.index_state.json`)
-5. Chunks by markdown headers (H1-H3), falls back to paragraph splitting, max ~800 chars
-6. Prepends document title to each chunk for better embedding context
-7. Uses `passage_embed` (not `embed` or `query_embed`) to match MCP server behavior
-8. Upserts with named vector `fast-all-minilm-l6-v2` and metadata payload
-9. Cleans up points for deleted files
+4. Skips unchanged files (tracked via `.index_state.json` in `INDEXER_STATE_DIR`)
+5. Loads the embedding model only once a file actually needs embedding
+6. Chunks by markdown headers (H1-H3), falls back to paragraph splitting, max ~800 chars
+7. Prepends document title to each chunk for better embedding context
+8. Uses `passage_embed` (not `embed` or `query_embed`) to match MCP server behavior
+9. Upserts with named vector `fast-all-minilm-l6-v2` and metadata payload
+10. Cleans up points for deleted files
 
 #### The unrouted-vault gap
 
@@ -634,13 +635,17 @@ python index_repos.py --dry-run
 1. Loads configuration from the `--config` yaml (`repos-work.yaml` / `repos-public.yaml`)
 2. Walks each repository, respecting skip patterns
 3. Skips unchanged files — state is per scope: `.index_repos_state_work.json` /
-   `.index_repos_state_public.json` (MD5 hashes), bind-mounted back to the host
-4. Detects language from file extension for code-aware chunking
-5. Prepends `repo/filepath` context to each chunk for better embeddings
-6. Uses `passage_embed` with named vector `fast-jina-embeddings-v2-base-code` (768d) —
+   `.index_repos_state_public.json` in `INDEXER_STATE_DIR` (the `indexer-state` volume).
+   Each entry holds the file's MD5 plus the mtime/size seen when it was hashed; a
+   matching mtime/size lets the run skip reading the file at all
+4. Loads the embedding model only once a file actually needs embedding, so a run in
+   which nothing changed never loads CUDA or the model
+5. Detects language from file extension for code-aware chunking
+6. Prepends `repo/filepath` context to each chunk for better embeddings
+7. Uses `passage_embed` with named vector `fast-jina-embeddings-v2-base-code` (768d) —
    **not** the 384d MiniLM vector the notes indexer uses
-7. Upserts with deterministic point IDs: `UUID5(repo::filepath::chunk_index)`
-8. Cleans up points for deleted files
+8. Upserts with deterministic point IDs: `UUID5(repo::filepath::chunk_index)`
+9. Cleans up points for deleted files
 
 ### Metadata
 
@@ -707,9 +712,17 @@ This is exactly how `code-work__jina` went 35 days without an update while `code
 kept indexing normally. When a collection looks stale, check that watcher's lock and logs
 specifically — a healthy sibling proves nothing.
 
-Index state, by contrast, **is** bind-mounted back to the host
-(`.index_repos_state_work.json`, `.index_repos_state_public.json`, `.index_state.json`),
-so it survives container replacement.
+Index state, by contrast, lives in the `indexer-state` named volume, mounted at `/state`
+(`INDEXER_STATE_DIR`) in every indexer and watcher, so it survives container replacement
+(`.index_repos_state_work.json`, `.index_repos_state_public.json`, `.index_state.json`).
+It is deliberately **not** under `REPOS_BASE`: the repo watchers poll that tree, so state
+written there would look like a source change and start another run. Being a volume, it
+is removed with `docker compose down -v`, alongside `qdrant-data`, which keeps it from
+describing vectors that no longer exist. To inspect it:
+`docker run --rm -v qdrant-mcp_indexer-state:/state alpine ls -la /state`.
+
+Each repo watcher walks only the repos its indexer config lists (`repos_base` + `repos`),
+not the whole of `watch_path`, so the poll covers exactly what the indexer reads.
 
 Each sidecar config file (`watcher-*.yaml`) defines:
 - `watch_path` — where in the container to watch

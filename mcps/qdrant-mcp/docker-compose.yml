@@ -50,6 +50,7 @@ services:
       - fastembed-cache:/root/.cache/fastembed
     environment:
       - PYTHONUNBUFFERED=1
+      - FASTEMBED_CACHE_PATH=/root/.cache/fastembed
     healthcheck:
       test: ['CMD-SHELL', 'python -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:7020/status\")" || exit 1']
       interval: 30s
@@ -71,10 +72,12 @@ services:
     container_name: obsidian-indexer
     mem_limit: 2g
     command: ["python", "index_obsidian.py", "--config", "/app/indexer.yaml"]
+    environment:
+      - INDEXER_STATE_DIR=/state
     volumes:
       - ${VAULT_PATH:-/nonexistent}:/vault:ro
       - ./indexer/indexer.yaml:/app/indexer.yaml:ro
-      - ./indexer/.index_state.json:/app/.index_state.json
+      - indexer-state:/state
     depends_on:
       qdrant:
         condition: service_healthy
@@ -103,10 +106,12 @@ services:
       - ${VAULT_PATH:-/nonexistent}:/vault:ro
       - ./indexer/indexer.yaml:/app/indexer.yaml:ro
       - ./indexer/watcher-obsidian.yaml:/app/watcher.yaml:ro
-      - ./indexer/.index_state.json:/app/.index_state.json
+      - indexer-state:/state
       - fastembed-cache:/root/.cache/fastembed
     environment:
       - PYTHONUNBUFFERED=1
+      - FASTEMBED_CACHE_PATH=/root/.cache/fastembed
+      - INDEXER_STATE_DIR=/state
     depends_on:
       qdrant:
         condition: service_healthy
@@ -134,16 +139,17 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - NVIDIA_VISIBLE_DEVICES=all
       - PYTHONUNBUFFERED=1
+      - FASTEMBED_CACHE_PATH=/root/.cache/fastembed
+      - INDEXER_STATE_DIR=/state
     volumes:
       - ${REPOS_BASE:-/nonexistent}:/repos:ro
       # Mount under the real name (NOT /app/repos.yaml): index_repos.py
       # derives its state filename from the config stem, so repos-work.yaml
-      # -> .index_repos_state_work.json (which IS bind-mounted and persists).
-      # Renaming to repos.yaml made it write .index_repos_state.json
-      # (ephemeral) -> state lost on every recreate -> repeated full builds.
+      # -> /state/.index_repos_state_work.json. Renaming to repos.yaml would
+      # switch it to .index_repos_state.json, an empty state -> a full rebuild.
       - ./indexer/repos-work.yaml:/app/repos-work.yaml:ro
       - ./indexer/watcher-repos.yaml:/app/watcher.yaml:ro
-      - ./indexer/.index_repos_state_work.json:/app/.index_repos_state_work.json
+      - indexer-state:/state
       - fastembed-cache:/root/.cache/fastembed
     deploy:
       resources:
@@ -175,13 +181,15 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - NVIDIA_VISIBLE_DEVICES=all
       - PYTHONUNBUFFERED=1
+      - FASTEMBED_CACHE_PATH=/root/.cache/fastembed
+      - INDEXER_STATE_DIR=/state
     volumes:
       - ${REPOS_BASE:-/nonexistent}:/repos:ro
       # Real name so state persists as .index_repos_state_public.json
       # (see repo-watcher-work note).
       - ./indexer/repos-public.yaml:/app/repos-public.yaml:ro
       - ./indexer/watcher-repos-public.yaml:/app/watcher.yaml:ro
-      - ./indexer/.index_repos_state_public.json:/app/.index_repos_state_public.json
+      - indexer-state:/state
       - fastembed-cache:/root/.cache/fastembed
     deploy:
       resources:
@@ -230,7 +238,17 @@ services:
 
 volumes:
   qdrant-data:
+  # Model cache. Only used where FASTEMBED_CACHE_PATH points at the mount:
+  # fastembed's default is /tmp/fastembed_cache in the container's writable
+  # layer, which a recreate throws away along with a 600-700 MB download.
   fastembed-cache:
+  # Indexer state (file hashes per indexed file). Kept out of the source tree
+  # because the repo watchers poll that tree: state written there re-triggered
+  # a full run on every save, and the public indexer embedded it. A directory
+  # mount also lets save_state's atomic rename work, which a single-file bind
+  # mount refuses with EBUSY. It shares qdrant-data's lifecycle, so `down -v`
+  # cannot leave state claiming vectors that no longer exist.
+  indexer-state:
 
 networks:
   ai-infrastructure:

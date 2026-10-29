@@ -11,6 +11,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from stat import S_ISREG
 
 import yaml
 from fastembed import TextEmbedding
@@ -141,18 +142,10 @@ def should_skip_dir(name: str, cfg: dict) -> bool:
 
 
 def should_index_file(path: Path, cfg: dict) -> bool:
-    """Return True if file should be indexed."""
+    """Return True if the file's name marks it as indexable. Size and file
+    type need a stat, which walk_repo does only for files that pass this."""
     name = path.name
     suffix = path.suffix.lower()
-
-    # Skip oversized files (generated/data/minified blobs). Hand-written source
-    # is rarely >1MB; large files explode into thousands of chunks, dominate
-    # embed time, and pollute a code-search index with non-source content.
-    try:
-        if path.stat().st_size > cfg["max_file_bytes"]:
-            return False
-    except OSError:
-        return False
 
     if name in cfg["skip_files"]:
         return False
@@ -183,6 +176,25 @@ def detect_language(path: Path) -> str:
 def file_hash(path: Path) -> str:
     """Return MD5 hex digest of file contents."""
     return hashlib.md5(path.read_bytes()).hexdigest()
+
+
+def stat_fingerprint(st: os.stat_result) -> dict:
+    """The stat fields a state entry records so a later run can skip the hash."""
+    return {"mtime_ns": st.st_mtime_ns, "size": st.st_size}
+
+
+def can_skip_hash(prev: dict, st: os.stat_result) -> bool:
+    """Return True if a file can be treated as unchanged without reading it.
+
+    prev is the file's entry from the last run's state: {"hash", "chunks"},
+    plus "mtime_ns" and "size" once a run has recorded them (older entries
+    lack both). st is the stat walk_repo took before this run read the file.
+
+    False is always safe: the caller then hashes the file and compares.
+    """
+    # TODO: decide when the stat fingerprint is trustworthy enough to skip
+    # the hash.
+    return False
 
 
 def chunk_code(content: str, language: str, max_chars: int) -> list[str]:
@@ -322,10 +334,17 @@ def chunk_by_lines(content: str, max_chars: int) -> list[str]:
 
 
 def load_state(state_file: Path) -> dict:
-    """Load previous indexing state."""
-    if state_file.exists():
+    """Load previous indexing state. A missing or unparseable file is empty."""
+    if not state_file.exists():
+        return {}
+    try:
         return json.loads(state_file.read_text())
-    return {}
+    except json.JSONDecodeError as exc:
+        # save_state's in-place fallback can leave truncated JSON behind a
+        # killed process. Starting empty costs one full reindex; raising would
+        # fail every run until someone deleted the file by hand.
+        print(f"WARNING: unreadable state file {state_file} ({exc}); starting empty")
+        return {}
 
 
 def save_state(state: dict, state_file: Path):
@@ -353,14 +372,13 @@ def save_state(state: dict, state_file: Path):
         tmp_file.unlink(missing_ok=True)
         raise
 
-    # EBUSY means the target is an individual bind-mounted file, which the
-    # container topology requires: the state file is mounted by name so it
-    # survives container recreates (a wrong path here previously caused repeated
-    # full rebuilds). The kernel refuses rename(2) onto an active mount point, so
-    # write through the existing inode instead. This is NOT atomic - a kill
-    # mid-write leaves truncated JSON - but load_state treats an unparseable file
-    # as absent, which costs a full reindex rather than producing wrong data.
-    # Atomicity here would require bind-mounting the enclosing directory.
+    # EBUSY means the target is an individual bind-mounted file. Compose mounts
+    # a state directory (INDEXER_STATE_DIR), where rename works; this covers a
+    # deployment that still mounts the file by name. The kernel refuses rename(2)
+    # onto an active mount point, so write through the existing inode instead.
+    # This is NOT atomic - a kill mid-write leaves truncated JSON - but
+    # load_state treats an unparseable file as absent, which costs a full
+    # reindex rather than producing wrong data.
     state_file.write_text(payload)
 
 
@@ -389,26 +407,102 @@ def ensure_collection(client: QdrantClient, name: str):
         print(f"  Created collection: {name}")
 
 
+class EmbeddingPipeline:
+    """The embedder plus the chunker built from its tokenizer, loaded on first use.
+
+    Loading the ONNX model and its CUDA context costs about a gigabyte and tens
+    of seconds, and a run in which no file changed never needs either.
+    """
+
+    def __init__(self, model_name: str, providers: list[str], max_tokens: int):
+        self._model_name = model_name
+        self._providers = providers
+        self._max_tokens = max_tokens
+        self._embedder: TextEmbedding | None = None
+        self._chunker: CodeChunker | None = None
+
+    @property
+    def embedder(self) -> TextEmbedding:
+        self._load()
+        return self._embedder
+
+    @property
+    def chunker(self) -> CodeChunker:
+        self._load()
+        return self._chunker
+
+    def _load(self):
+        if self._embedder is not None:
+            return
+        print(f"  Loading embedding model {self._model_name} ({self._providers})")
+        self._embedder = TextEmbedding(
+            model_name=self._model_name, providers=self._providers
+        )
+
+        # AST/token-aware chunker, bounded by the model's REAL tokenizer. Pull
+        # it from the embedder (FastEmbed loads it internally); use a copy with
+        # truncation disabled so counting/splitting a huge data blob isn't
+        # silently capped at the model's 8192 max. Safe: the chunker guarantees
+        # <=max_tokens chunks, so the embedder never sees an over-length input.
+        tokenizer = None
+        src_tok = getattr(getattr(self._embedder, "model", None), "tokenizer", None)
+        if src_tok is not None:
+            try:
+                from tokenizers import Tokenizer
+
+                tokenizer = Tokenizer.from_str(src_tok.to_str())
+                tokenizer.no_truncation()
+                tokenizer.no_padding()
+            except Exception:
+                tokenizer = src_tok
+        if tokenizer is None:  # last resort: cache glob, then chars/4 estimate
+            tokenizer = load_jina_tokenizer(self._model_name)
+        if tokenizer is not None:
+            def count_tokens(s):
+                return len(tokenizer.encode(s).ids)
+        else:
+            def count_tokens(s):
+                return max(1, len(s) // 4)
+        self._chunker = CodeChunker(
+            count_tokens, max_tokens=self._max_tokens, tokenizer=tokenizer
+        )
+        print(
+            f"  Chunker: tree-sitter AST | tokenizer="
+            f"{'jina(real)' if tokenizer else 'ESTIMATE(chars/4)'} | "
+            f"max_tokens={self._max_tokens}"
+        )
+
+
 def walk_repo(repo_path: Path, cfg: dict):
-    """Walk repo yielding indexable files, respecting skip patterns."""
+    """Walk repo yielding (path, stat) for indexable files, respecting skip
+    patterns. The one stat taken here serves every later size/mtime check."""
     for root, dirs, files in repo_path.walk():
         dirs[:] = [d for d in dirs if not should_skip_dir(d, cfg)]
 
         for fname in sorted(files):
             fpath = root / fname
-            # is_file() guard: defensive against broken symlinks or pathlib
-            # walk edge cases. Profisee repos don't use Obsidian's note-as-folder
-            # pattern, but the cost of the check is negligible and the crash
-            # mode (IsADirectoryError on read_bytes) is the same.
-            if should_index_file(fpath, cfg) and fpath.is_file():
-                yield fpath
+            # Name checks first: they are free, while every stat is a round
+            # trip to the host filesystem on a Docker Desktop bind mount.
+            if not should_index_file(fpath, cfg):
+                continue
+            try:
+                st = fpath.stat()
+            except OSError:  # broken symlink, or removed since the listing
+                continue
+            # Regular-file guard: a directory named like source would raise
+            # IsADirectoryError on read. Oversized files are generated/data/
+            # minified blobs that explode into thousands of chunks, dominate
+            # embed time, and pollute a code-search index.
+            if not S_ISREG(st.st_mode) or st.st_size > cfg["max_file_bytes"]:
+                continue
+            yield fpath, st
 
 
 def index_repo(
     repo_name: str,
     repo_path: Path,
     cfg: dict,
-    embedder: TextEmbedding,
+    pipeline: EmbeddingPipeline,
     client: QdrantClient,
     prev_state: dict,
     new_state: dict,
@@ -487,10 +581,32 @@ def index_repo(
                     points=points[bi : bi + UPSERT_BATCH],
                 )
 
-        new_state[pf["state_key"]] = {"hash": pf["hash"], "chunks": len(file_chunks)}
+        new_state[pf["state_key"]] = {
+            "hash": pf["hash"],
+            "chunks": len(file_chunks),
+            **pf["fingerprint"],
+        }
         stats["indexed"] += 1
         stats["chunks"] += len(file_chunks)
         repo_files += 1
+
+    def record_skipped(state_key, rel_str, h, fingerprint, prev):
+        """Remember a file that yields no points (empty, generated, no chunks).
+
+        Unrecorded, it looks new to every later run and is re-read each time;
+        a BOM-only placeholder even reaches the chunker and forces the model
+        to load. Any points it had before it became skippable are removed.
+        """
+        old_chunks = (prev or {}).get("chunks", 0)
+        if old_chunks and not dry_run:
+            client.delete(
+                collection_name=collection_name,
+                points_selector=[
+                    make_point_id(repo_name, rel_str, i) for i in range(old_chunks)
+                ],
+            )
+        new_state[state_key] = {"hash": h, "chunks": 0, **fingerprint}
+        stats["skipped"] += 1
 
     def embed_each(batch: list):
         """Re-embed a failed batch one file at a time.
@@ -504,7 +620,7 @@ def index_repo(
         for pf in batch:
             try:
                 vectors = list(
-                    embedder.passage_embed(pf["texts"], batch_size=BATCH_SIZE)
+                    pipeline.embedder.passage_embed(pf["texts"], batch_size=BATCH_SIZE)
                 )
             except Exception as e:
                 print(f"  ERROR embedding {pf['rel_str']}: {e}")
@@ -523,7 +639,7 @@ def index_repo(
 
         texts = [t for pf in batch for t in pf["texts"]]
         try:
-            vectors = list(embedder.passage_embed(texts, batch_size=BATCH_SIZE))
+            vectors = list(pipeline.embedder.passage_embed(texts, batch_size=BATCH_SIZE))
         except Exception as e:
             print(f"  ERROR embedding batch of {len(batch)} files: {e}")
             embed_each(batch)
@@ -551,7 +667,7 @@ def index_repo(
     total = len(files)
     is_tty = sys.stdout.isatty()
 
-    for processed, fpath in enumerate(
+    for processed, (fpath, st) in enumerate(
         tqdm(
             files, desc=f"  {repo_name}", unit="file", leave=True,
             disable=not is_tty, mininterval=2.0,
@@ -572,7 +688,13 @@ def index_repo(
         state_key = f"{repo_name}::{rel_str}"
         current_keys.add(state_key)
 
-        # Check if file changed
+        # Check if file changed: stat fingerprint first, content hash second.
+        prev = prev_state.get(state_key)
+        if prev is not None and can_skip_hash(prev, st):
+            new_state[state_key] = prev
+            stats["unchanged"] += 1
+            continue
+
         try:
             h = file_hash(fpath)
         except Exception as e:
@@ -580,8 +702,15 @@ def index_repo(
             stats["errors"] += 1
             continue
 
-        if state_key in prev_state and prev_state[state_key]["hash"] == h:
-            new_state[state_key] = prev_state[state_key]
+        # The fingerprint comes from the walk's stat, taken before the read
+        # above. A write landing after that stat changes the next run's stat,
+        # so recording it can never hide an edit; a stat taken after the read
+        # could.
+        fingerprint = stat_fingerprint(st)
+        if prev is not None and prev["hash"] == h:
+            # Content unchanged but the stat moved (a checkout or touch).
+            # Refresh the fingerprint so the next run can skip the hash.
+            new_state[state_key] = {**prev, **fingerprint}
             stats["unchanged"] += 1
             continue
 
@@ -594,21 +723,21 @@ def index_repo(
             continue
 
         if not content.strip():
-            stats["skipped"] += 1
+            record_skipped(state_key, rel_str, h, fingerprint, prev)
             continue
 
         # Skip auto-generated source (WCF Reference.cs, *.Designer.cs, etc.):
         # noise in a code-search index. Excluded by what the file IS, not by
         # size/line-length. Token chunking (below) already prevents any stall.
         if is_generated(content):
-            stats["skipped"] += 1
+            record_skipped(state_key, rel_str, h, fingerprint, prev)
             continue
 
         language = detect_language(fpath)
-        chunks = cfg["chunker"].chunk(content, language)
+        chunks = pipeline.chunker.chunk(content, language)
 
         if not chunks:
-            stats["skipped"] += 1
+            record_skipped(state_key, rel_str, h, fingerprint, prev)
             continue
 
         # Prepend file context to each chunk for better embeddings
@@ -623,12 +752,13 @@ def index_repo(
                 "language": language,
                 "chunks": chunks,
                 "texts": texts,
-                "old_chunks": prev_state.get(state_key, {}).get("chunks", 0),
-                # Stat now, while the file is known-good, rather than at flush
-                # time: a file removed between buffering and flushing would
-                # otherwise raise and take the whole batch with it.
+                "old_chunks": (prev or {}).get("chunks", 0),
+                "fingerprint": fingerprint,
+                # From the walk's stat rather than a stat at flush time: a file
+                # removed between buffering and flushing would otherwise raise
+                # and take the whole batch with it.
                 "last_modified": datetime.fromtimestamp(
-                    fpath.stat().st_mtime, tz=timezone.utc
+                    st.st_mtime, tz=timezone.utc
                 ).isoformat(),
             }
         )
@@ -682,14 +812,19 @@ def main():
     # repos-work.yaml -> .index_repos_state_work.json,
     # repos-public.yaml -> .index_repos_state_public.json,
     # legacy repos.yaml -> .index_repos_state.json (backwards compat).
+    #
+    # INDEXER_STATE_DIR puts state outside the indexed tree. Beside the config
+    # it sat inside the repos the watchers poll, so every save looked like a
+    # source change and started another full run.
+    state_dir = Path(os.environ.get("INDEXER_STATE_DIR") or config_path.parent)
     stem = config_path.stem
     if stem == "repos":
-        state_file = config_path.parent / ".index_repos_state.json"
+        state_file = state_dir / ".index_repos_state.json"
     elif stem.startswith("repos-"):
         suffix = stem[len("repos-"):]
-        state_file = config_path.parent / f".index_repos_state_{suffix}.json"
+        state_file = state_dir / f".index_repos_state_{suffix}.json"
     else:
-        state_file = config_path.parent / f".index_repos_state_{stem}.json"
+        state_file = state_dir / f".index_repos_state_{stem}.json"
 
     print(f"Repos base: {repos_base}")
     print(f"Repos: {len(repos)}")
@@ -715,48 +850,18 @@ def main():
     # Qdrant. The work and public watchers now overlap where they used to
     # serialise, so that ceiling became reachable and aborted whole runs.
     client = QdrantClient(url=qdrant_url, timeout=120)
-    embedder = TextEmbedding(model_name=EMBEDDING_MODEL, providers=PROVIDERS)
     ensure_collection(client, collection_name)
+    pipeline = EmbeddingPipeline(EMBEDDING_MODEL, PROVIDERS, cfg["max_tokens"])
 
-    # AST/token-aware chunker, bounded by the model's REAL tokenizer. Pull it
-    # from the embedder (FastEmbed loads it internally); use a copy with
-    # truncation disabled so counting/splitting a huge data blob isn't silently
-    # capped at the model's 8192 max. Safe: the chunker guarantees <=max_tokens
-    # chunks, so the embedder itself never sees an over-length input.
-    tokenizer = None
-    src_tok = getattr(getattr(embedder, "model", None), "tokenizer", None)
-    if src_tok is not None:
-        try:
-            from tokenizers import Tokenizer
-
-            tokenizer = Tokenizer.from_str(src_tok.to_str())
-            tokenizer.no_truncation()
-            tokenizer.no_padding()
-        except Exception:
-            tokenizer = src_tok
-    if tokenizer is None:  # last resort: cache glob, then chars/4 estimate
-        tokenizer = load_jina_tokenizer(EMBEDDING_MODEL)
-    if tokenizer is not None:
-        def count_tokens(s):
-            return len(tokenizer.encode(s).ids)
-    else:
-        def count_tokens(s):
-            return max(1, len(s) // 4)
-    cfg["chunker"] = CodeChunker(
-        count_tokens, max_tokens=cfg["max_tokens"], tokenizer=tokenizer
-    )
-    print(
-        f"Chunker: tree-sitter AST | tokenizer="
-        f"{'jina(real)' if tokenizer else 'ESTIMATE(chars/4)'} | max_tokens={cfg['max_tokens']}"
-    )
-
-    using_gpu = "CUDAExecutionProvider" in PROVIDERS
     print(f"Providers: {PROVIDERS}")
     print(f"Batch size: {BATCH_SIZE}")
     print()
 
     prev_state = {} if args.force else load_state(state_file)
     new_state = {}
+    # What is on disk, so unchanged state is never rewritten. None forces the
+    # first write when --force has ignored the file.
+    last_saved = None if args.force else prev_state
     stats = {"skipped": 0, "indexed": 0, "unchanged": 0, "errors": 0, "chunks": 0}
     current_keys = set()
 
@@ -788,7 +893,7 @@ def main():
             repo_name,
             repo_path,
             cfg,
-            embedder,
+            pipeline,
             client,
             prev_state,
             new_state,
@@ -804,8 +909,15 @@ def main():
 
         # Checkpoint after each repo so a long (~79 min, 678k-chunk) build that
         # dies partway resumes from the last completed repo instead of zero.
+        # The checkpoint overlays prev_state: repos not reached yet, and deleted
+        # files whose points the cleanup pass has not removed yet, must survive
+        # an interrupted run. Saving new_state alone made the next run re-embed
+        # every unreached repo and orphan the deleted files' points.
         if not args.dry_run:
-            save_state(new_state, state_file)
+            checkpoint = {**prev_state, **new_state}
+            if checkpoint != last_saved:
+                save_state(checkpoint, state_file)
+                last_saved = checkpoint
 
     # Clean up deleted files — only from repos in the current config.
     # Files from repos NOT in the config are preserved so that running
@@ -831,7 +943,7 @@ def main():
         if key.split("::", 1)[0] not in active_repos:
             new_state[key] = value
 
-    if not args.dry_run:
+    if not args.dry_run and new_state != last_saved:
         save_state(new_state, state_file)
 
     # Summary
