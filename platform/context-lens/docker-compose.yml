@@ -89,3 +89,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+
+  # Imports Claude Code's raw API body logs into Context Lens, so Claude Code
+  # can be captured without ANTHROPIC_BASE_URL (which disables Remote Control).
+  # Claude Code writes the logs when its settings env sets
+  # OTEL_LOG_RAW_API_BODIES=file:<CONTEXT_LENS_DATA>/otel-bodies (see README).
+  otel-ingest:
+    build: ./otel-ingest
+    image: context-lens-otel-ingest
+    container_name: context-lens-otel-ingest
+    restart: unless-stopped
+    mem_limit: 256m
+    # Startup ordering only: the importer retries until the ingest API answers.
+    depends_on:
+      context-lens:
+        condition: service_started
+    volumes:
+      - ${CONTEXT_LENS_DATA:-~/.context-lens/data}/otel-bodies:/bodies
+    environment:
+      INGEST_URL: "http://context-lens:4041/api/ingest"
+      RETENTION_DAYS: "3"

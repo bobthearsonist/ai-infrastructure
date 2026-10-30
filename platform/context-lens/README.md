@@ -176,7 +176,25 @@ claude
 
 ### Claude Code
 
-Point Claude Code at the proxy using any of the methods in [Setting ANTHROPIC_BASE_URL](#setting-anthropic_base_url) above.
+Pointing `ANTHROPIC_BASE_URL` at the proxy still works, but Claude Code turns Remote Control off whenever the base URL isn't `api.anthropic.com` (since v2.1.196), and the proxy then sits in front of every request. The recommended route captures from Claude Code's own request log instead, and leaves the base URL alone.
+
+Add this to the `env` block of your **user** settings (`~/.claude/settings.json`; Claude Code ignores these variables in project settings), with the path pointing at `<CONTEXT_LENS_DATA>/otel-bodies`:
+
+```jsonc
+"env": {
+  "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+  "OTEL_LOG_RAW_API_BODIES": "file:C:/Users/<you>/.context-lens/data/otel-bodies",
+  // Sends the full context on every request. With server-side threads on,
+  // requests after the first carry only the new messages.
+  "CLAUDE_CODE_TETHER_LIVE": "0"
+}
+```
+
+Then remove `ANTHROPIC_BASE_URL` from everywhere Claude Code inherits it (see [Disabling the proxy](#disabling-the-proxy)). Put these in a settings file rather than a shell profile, because background sessions started by the Claude Code daemon don't inherit your shell's environment.
+
+The `otel-ingest` container follows the log and imports each request into Context Lens as if the proxy had captured it, grouped by Claude session. It skips Claude Code's `quota` probes, deletes each request/response pair once Context Lens accepts it, retries while Context Lens is down, and removes anything older than `RETENTION_DAYS` (3).
+
+Compared with the proxy you lose per-request timings and HTTP headers. Thinking text is missing either way, since the API only returns it encrypted. `CLAUDE_CODE_TETHER_LIVE` is undocumented; if a Claude Code release stops honouring it, the importer logs `skip ...: thread continuation` instead of importing partial requests.
 
 ### OpenCode
 
