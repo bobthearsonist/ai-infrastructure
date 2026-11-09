@@ -35,7 +35,7 @@ from filters import (
 # --- GPU detection ---
 
 
-def detect_providers() -> tuple[list[str], int]:
+def detect_providers() -> tuple[list, int]:
     """Detect available ONNX Runtime providers. Returns (providers, batch_size)."""
     try:
         import onnxruntime as ort
@@ -43,6 +43,17 @@ def detect_providers() -> tuple[list[str], int]:
         available = ort.get_available_providers()
         if "CUDAExecutionProvider" in available:
             return ["CUDAExecutionProvider"], 256
+        # Intel iGPU/NPU via the onnxruntime-openvino build ('intel' image
+        # target). Opt-in through OPENVINO_DEVICE because the EP is also
+        # listed when no usable device is mapped into the container.
+        ov_device = os.environ.get("OPENVINO_DEVICE")
+        if ov_device and "OpenVINOExecutionProvider" in available:
+            ov_options = {"device_type": ov_device, "precision": "FP16"}
+            # Persist compiled blobs so restarts skip the model compile.
+            ov_cache = os.environ.get("OPENVINO_CACHE_DIR")
+            if ov_cache:
+                ov_options["cache_dir"] = ov_cache
+            return [("OpenVINOExecutionProvider", ov_options), "CPUExecutionProvider"], 16
     except ImportError:
         pass
     return ["CPUExecutionProvider"], 32
@@ -395,7 +406,7 @@ class EmbeddingPipeline:
     of seconds, and a run in which no file changed never needs either.
     """
 
-    def __init__(self, model_name: str, providers: list[str], max_tokens: int):
+    def __init__(self, model_name: str, providers: list, max_tokens: int):
         self._model_name = model_name
         self._providers = providers
         self._max_tokens = max_tokens

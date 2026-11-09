@@ -1,0 +1,44 @@
+# Intel iGPU override for the repo watchers/indexer (machines without an
+# NVIDIA GPU, running Docker Desktop on WSL2 - e.g. Core Ultra laptops).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.intel-gpu.yml up -d --build
+#
+# Embeds through ONNX Runtime's OpenVINO provider on the iGPU. WSL2 exposes
+# the GPU as /dev/dxg with user-space libs under /usr/lib/wsl, both mapped in
+# below. The NPU is not reachable from WSL2 containers.
+# Measured on a Core Ultra 7 365 (jina-v2-base-code, mixed chunk lengths):
+# ~7x the CPU provider's throughput, and the CPU stays free.
+x-intel-gpu: &intel-gpu
+  build:
+    context: ./indexer
+    target: intel
+  image: qdrant-mcp-indexer:intel
+  deploy: !reset {}
+  devices:
+    - /dev/dxg:/dev/dxg
+  environment:
+    - QDRANT_URL=http://qdrant:6333
+    - PYTHONUNBUFFERED=1
+    - FASTEMBED_CACHE_PATH=/root/.cache/fastembed
+    - INDEXER_STATE_DIR=/state
+    - OPENVINO_DEVICE=GPU
+    - OPENVINO_CACHE_DIR=/root/.cache/fastembed/openvino
+  # Tokenizing and chunking still run on the CPU.
+  cpus: 4
+
+services:
+  repo-watcher-work:
+    <<: *intel-gpu
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl:ro
+  repo-watcher-public:
+    <<: *intel-gpu
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl:ro
+  repo-indexer:
+    <<: *intel-gpu
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - OPENVINO_DEVICE=GPU
+    volumes:
+      - /usr/lib/wsl:/usr/lib/wsl:ro

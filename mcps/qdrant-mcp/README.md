@@ -699,6 +699,21 @@ others keep working.
 The two repo watchers are the **same image watching the same mount**. What separates them
 is which yaml is bind-mounted onto `/app/watcher.yaml` (there is no `REPOS_CONFIG` env var).
 
+### Machines without an NVIDIA GPU (Intel iGPU)
+
+On Intel laptops (e.g. Core Ultra) under Docker Desktop/WSL2, layer the Intel override so the
+repo watchers embed on the iGPU through ONNX Runtime's OpenVINO provider:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.intel-gpu.yml up -d --build
+```
+
+It builds the `:intel` image target, maps `/dev/dxg` and `/usr/lib/wsl` into the containers,
+and sets `OPENVINO_DEVICE=GPU`. `index_repos.py` only selects OpenVINO when that variable is
+set, and falls back to CPU otherwise. On a Core Ultra 7 365 it ran about 7x faster than the CPU
+provider on mixed-length jina chunks. The NPU can't be used here because WSL2 doesn't expose it
+to containers (there's no `/dev/accel`).
+
 ### Cadence
 
 Differs between code and notes — code changes arrive in build-sized bursts, note edits do not.

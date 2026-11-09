@@ -1,0 +1,11 @@
+qdrant-client==1.18.0
+# Intel iGPU/NPU image ('intel' Dockerfile target). Same set as
+# requirements.txt, except onnxruntime is replaced by onnxruntime-openvino
+# (the Dockerfile uninstalls the plain onnxruntime that fastembed pulls in,
+# since both wheels ship the same `onnxruntime` module).
+fastembed==0.8.0
+pyyaml==6.0.3
+watchdog>=4.0.0
+tree-sitter==0.25.2
+tree-sitter-language-pack==1.9.1
+tokenizers==0.23.1
