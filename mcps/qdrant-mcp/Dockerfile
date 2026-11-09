@@ -18,7 +18,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
 
 # mcp-proxy >= 0.14 rejects any Host header not on its allowlist (DNS-rebinding
 # protection). mcpx reaches this container as qdrant-mcp (shared network) or
-# host.docker.internal, so both must be trusted explicitly.
+# host.docker.internal, so both must be trusted explicitly. agentgateway sends
+# the bare host without a port, which "qdrant-mcp:*" does not match.
 CMD ["mcp-proxy", "--pass-environment", "--host", "0.0.0.0", "--port", "7020", \
-     "--allowed-host", "qdrant-mcp:*", "--allowed-host", "host.docker.internal:*", \
+     "--allowed-host", "qdrant-mcp", "--allowed-host", "qdrant-mcp:*", \
+     "--allowed-host", "host.docker.internal:*", \
      "--named-server-config", "/config/servers.json"]

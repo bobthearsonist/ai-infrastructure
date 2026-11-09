@@ -30,9 +30,11 @@ binds:
                         # Use the hyphen alias — agentgateway's strict DNS
                         # resolver rejects underscores per RFC 1035.
                         host: http://memory-mcp:7040/servers/memory/sse
-                    - name: kapture
-                      sse:
-                        host: http://agentgateway-stdio-proxy:7030/servers/kapture/sse
+                    # Disabled: kapture now runs in its own container and is no longer a
+                    # stdio-proxy server, so this path 404s and aborts init for all targets.
+                    # - name: kapture
+                    #   sse:
+                    #     host: http://agentgateway-stdio-proxy:7030/servers/kapture/sse
                     # Qdrant RAG (standalone container - multi-collection)
                     - name: qdrant-notes-work
                       sse:
@@ -49,15 +51,18 @@ binds:
                     - name: context7
                       mcp:
                         host: http://context7-mcp:7008/mcp
-                    - name: playwright
-                      sse:
-                        host: http://host.docker.internal:7007/sse
-                    - name: browser-use
-                      sse:
-                        host: http://host.docker.internal:7011/sse
-                    - name: hass-mcp
-                      sse:
-                        host: http://agentgateway-stdio-proxy:7030/servers/hass-mcp/sse
+                    # Disabled on windows-work: no playwright (:7007) or browser-use (:7011)
+                    # host server runs here, and hass-mcp is not in stdio-proxy's servers
+                    # config. Any unreachable target aborts init for every target.
+                    # - name: playwright
+                    #   sse:
+                    #     host: http://host.docker.internal:7007/sse
+                    # - name: browser-use
+                    #   sse:
+                    #     host: http://host.docker.internal:7011/sse
+                    # - name: hass-mcp
+                    #   sse:
+                    #     host: http://agentgateway-stdio-proxy:7030/servers/hass-mcp/sse
                     # TODO: azure-devops — not yet configured in stdio-proxy/servers.home.json.
                     # Enabling this target without a matching servers.json entry makes
                     # stdio-proxy 404 on /servers/azure-devops/sse, which aborts the
