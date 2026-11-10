@@ -63,6 +63,7 @@ skip_dirs:
   - .vscode
   - packages
   - TestResults
+  - .history
 
 skip_files:
   - package-lock.json
