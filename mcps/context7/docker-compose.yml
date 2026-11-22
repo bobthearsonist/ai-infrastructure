@@ -10,7 +10,7 @@ services:
     restart: unless-stopped
     mem_limit: 256m
     ports:
-      - '7008:7008' # Context7 MCP HTTP port
+      - '127.0.0.1:7008:7008' # Context7 MCP HTTP port
     networks:
       - ai-infrastructure
     # Healthcheck: TCP port check since Context7 has no dedicated /health endpoint.

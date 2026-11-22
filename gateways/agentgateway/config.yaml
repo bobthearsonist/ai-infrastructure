@@ -12,9 +12,12 @@ binds:
         routes:
           - name: mcp-tools
             policies:
+              # Only agentgateway's own UI (playground) calls this from a browser.
+              # '*' let any web page drive every tool behind this listener.
               cors:
                 allowOrigins:
-                  - '*'
+                  - 'http://localhost:15001'
+                  - 'http://127.0.0.1:15001'
                 allowHeaders:
                   - '*'
             backends:

@@ -27,8 +27,8 @@ services:
         echo "Starting context-lens standalone (proxy + web UI)..."
         npx context-lens --no-open
     ports:
-      - "4040:4040"
-      - "4041:4041"
+      - "127.0.0.1:4040:4040"
+      - "127.0.0.1:4041:4041"
     volumes:
       - ${CONTEXT_LENS_DATA:-~/.context-lens/data}:/root/.context-lens/data
     environment:
@@ -76,7 +76,7 @@ services:
       - "--set"
       - "block_global=false"
     ports:
-      - "${MITMPROXY_PORT:-18080}:8080"
+      - "127.0.0.1:${MITMPROXY_PORT:-18080}:8080"
     volumes:
       - ./mitm_addon.py:/addon/mitm_addon.py:ro
       - ${MITMPROXY_CERTS:-~/.mitmproxy}:/home/mitmproxy/.mitmproxy

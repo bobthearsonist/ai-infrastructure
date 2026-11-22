@@ -10,7 +10,7 @@ services:
     container_name: adb-proxy
     restart: unless-stopped
     ports:
-      - "3927:3001"  # WebSocket for Photoshop UXP plugin (host 3927 → container 3001)
+      - "127.0.0.1:3927:3001"  # WebSocket for Photoshop UXP plugin (host 3927 → container 3001)
     networks:
       - ai-infrastructure
     healthcheck:
