@@ -96,34 +96,6 @@ services:
       - default        # Private network for stdio-proxy
       - ai-shared      # Shared network for other MCP services
 
-  # Lunar Proxy - API Gateway (optional, for rate limiting / observability)
-  lunar-proxy:
-    image: lunarapi/lunar-proxy:latest
-    container_name: lunar-proxy
-    restart: unless-stopped
-    mem_limit: 512m
-    # No published ports and not on ai-shared. lunar-proxy forwards any request
-    # to whatever host the x-lunar-host header names and rewrites Host, so
-    # anything that can reach it reaches every service it can see, including
-    # mcpx:9000/ws-ui (unauthenticated) and paperless-mcp. Nothing uses it today;
-    # if that changes, reach it from inside this stack, never from the host.
-    # Only lunar-proxy's own config. Mounting the whole directory would hand
-    # this third-party image (telemetry on) mcpx's secrets/, .env and TLS key.
-    volumes:
-      - ./gateway_config.yaml:/etc/lunar-proxy/gateway_config.yaml
-      - ./flows:/etc/lunar-proxy/flows
-      - ./quotas:/etc/lunar-proxy/quotas
-      - ./path_params:/etc/lunar-proxy/path_params
-    environment:
-      - TENANT_NAME=ORGANIZATION
-      - LUNAR_API_KEY=8adb1fcd-30dd-4a99-ada4-653f2be8c225
-      - LOG_LEVEL=ERROR
-      - LUNAR_MANAGED=false
-      - LUNAR_TELEMETRY=true
-    # Its own network: it cannot see mcpx, paperless-mcp or anything on ai-shared.
-    networks:
-      - lunar
-
   # NGINX SSL Proxy
   nginx-ssl:
     image: nginx:alpine
@@ -175,5 +147,3 @@ networks:
     # Each stack gets its own default network to prevent DNS collisions
   ai-shared:
     external: true
-  lunar:
-    # Isolation network for lunar-proxy only.

@@ -49,7 +49,6 @@ package "MCP Gateway layer" as gateways #DCEDC8 {
     [psmcp / Photoshop\n(mcpx only, per-machine)] as stdio_psmcp #FFECB3
   }
   component "mcp-status\n(health poller, per gateway)" as mcp_status #BCAAA4
-  component "lunar-proxy\n(mcpx only · inactive)" as lunar #E0E0E0
 }
 
 ' === Shared MCPs (ai-shared network) — each box = 1 standalone container ===
@@ -193,7 +192,6 @@ Each stack is a self-contained `docker compose` unit. Stacks with a stdio-proxy 
 | nginx-ssl | TLS termination for mcpx; proxies `/mcp` and `/sse` on :9443; serves Control Plane on :5443; proxies CDP on :9222 → host :9222 | :9443 (HTTPS MCP), :5443 (HTTPS UI), :9222 (CDP) |
 | stdio-proxy | Bridges stdio MCPs: **sequential-thinking** + **azure-devops** (azure-devops added via the per-server overlay `mcps/azure-devops/docker-compose.yml` that mcpx's compose includes, which mounts `~/.azure` into the proxy) | (internal :7030) |
 | mcp-status | Polls stdio-proxy /status every 30s, logs per-MCP health | — |
-| lunar-proxy | API gateway for rate limiting / observability (defined but not actively routed through) | :8000, :8040, :8081 |
 
 > **Note on Kapture WebSocket (:61822):** previously proxied through `nginx-ssl`, now served by the standalone `kapture-server` container (`mcps/kapture/docker-compose.yml`). The `nginx-ssl` block above no longer publishes it.
 
@@ -467,10 +465,7 @@ Single sorted reference. `Stack` is the compose project the port belongs to; int
 | 7020 | HTTP | qdrant-mcp | qdrant-mcp | Semantic search MCP |
 | 7030 | HTTP | stdio-proxy | per-gateway | **Internal only** — stdio→SSE bridge inside each gateway stack |
 | 7040 | HTTP | memory | shared MCP | Knowledge graph MCP (singleton) |
-| 8000 | HTTP | lunar-proxy | mcpx | API gateway (not actively routed) |
-| 8040 | HTTP | lunar-proxy | mcpx | Health check |
 | 8080 | HTTP | mitmproxy | context-lens | HTTPS forward proxy (Copilot, Codex, etc.) |
-| 8081 | HTTP | lunar-proxy | mcpx | Admin |
 | 8889 | Prometheus | OTel Collector | observability | Span metrics (internal) |
 | 9000 | HTTP/MCP | mcpx | mcpx | **Main MCP endpoint** (SSE + streamable HTTP) |
 | 9001 | HTTP | mcpx | mcpx | Internal webserver |
