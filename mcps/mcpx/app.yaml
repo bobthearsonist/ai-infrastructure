@@ -81,6 +81,21 @@ permissions:
         - browser
         - creative
         - code-quality
+    copilot-cli:
+      _type: default-block
+      consumerGroupKey: copilot-cli Profile
+      allow:
+        - core
+        - coding
+        - knowledge-notes-work
+        - knowledge-code-work
+        - knowledge-code-public
+        - devops
+        - diagrams
+        - homelab
+        - creative
+        - knowledge-personal
+        - paperless-read
     opencode:
       _type: default-block
       consumerGroupKey: opencode
