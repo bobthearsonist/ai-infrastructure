@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "paperless": {
+      "command": "node",
+      "args": ["/opt/paperless-mcp/node_modules/@baruchiro/paperless-mcp/build/index.js"]
+    }
+  }
+}

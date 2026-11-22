@@ -1,0 +1,3 @@
+secrets/
+# Local knowledge-graph export, not configuration.
+memory.json

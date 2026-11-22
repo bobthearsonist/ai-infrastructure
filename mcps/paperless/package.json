@@ -1,0 +1,7 @@
+{
+  "name": "paperless-mcp-runtime",
+  "private": true,
+  "dependencies": {
+    "@baruchiro/paperless-mcp": "2.3.0"
+  }
+}

@@ -39,20 +39,37 @@ services:
     # Gateway process idles ~220MB; 512m caps blast radius without
     # OOM-killing it under request load.
     mem_limit: 512m
-    privileged: true
+    # Not privileged. The image only needs it for Docker-in-Docker, which
+    # serves stdio MCPs launched with `command: docker`; none in mcp.json are.
+    # Without it the entrypoint logs "privileged=no, skipping docker". Adding a
+    # docker-launched stdio server means revisiting this, not flipping it back.
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
+    # :9000 is deliberately NOT published here. Host clients reach the API
+    # through nginx-ssl, which enforces Host/Origin checks that mcpx lacks (see
+    # nginx.conf). Everything else is loopback only.
     ports:
-      - "9000:9000" # MCPX API port (SSE + streamable HTTP)
-      - "5173:5173" # Control Plane UI port
-      - "9001:9001" # Internal webserver port
-      - "3100:3000" # Metrics port (remapped from 3000 - conflict with other service)
+      # Dashboard on an uncommon host port, IPv4 only. 5173 is Vite's default
+      # dev port, so on the host it is routinely served by other projects
+      # (often on [::1], which Docker never holds), and every page served there
+      # would carry the Origin the gateway trusts.
+      - "127.0.0.1:15173:5173" # Control Plane UI (static files; API calls go to :9000)
+      - "127.0.0.1:9001:9001" # Internal webserver port
+      - "127.0.0.1:3100:3000" # Metrics port (remapped from 3000 - conflict with other service)
+    # AUTH_KEY: the API key mcpx requires on MCP and REST routes when
+    # app.yaml sets auth.enabled. Clients send it as x-lunar-api-key.
+    env_file:
+      - ./secrets/mcpx-auth.env
+    environment:
+      - NODE_EXTRA_CA_CERTS=${CUSTOM_CA_CERT:+/usr/local/share/ca-certificates/custom-ca.pem}
+      # REST CORS and the /ws-ui socket.io origin. Unset, the websocket allows
+      # "*". This only restrains browsers' long-polling; websocket upgrades
+      # skip CORS, which is why nginx-ssl does the real Origin check.
+      - CORS_ORIGINS=http://127.0.0.1:15173
     volumes:
       - ./:/lunar/packages/mcpx-server/config
       - ${MCP_CONFIG}:/lunar/packages/mcpx-server/config/mcp.json:ro
       - ${CUSTOM_CA_CERT:-/dev/null}:/usr/local/share/ca-certificates/custom-ca.pem:ro
-    environment:
-      - NODE_EXTRA_CA_CERTS=${CUSTOM_CA_CERT:+/usr/local/share/ca-certificates/custom-ca.pem}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # service_started, NOT service_healthy. stdio-proxy fronts npx-based MCPs
@@ -85,20 +102,27 @@ services:
     container_name: lunar-proxy
     restart: unless-stopped
     mem_limit: 512m
-    ports:
-      - "8000:8000" # Main proxy port
-      - "8040:8040" # Health check port
-      - "8081:8081" # Admin port
+    # No published ports and not on ai-shared. lunar-proxy forwards any request
+    # to whatever host the x-lunar-host header names and rewrites Host, so
+    # anything that can reach it reaches every service it can see, including
+    # mcpx:9000/ws-ui (unauthenticated) and paperless-mcp. Nothing uses it today;
+    # if that changes, reach it from inside this stack, never from the host.
+    # Only lunar-proxy's own config. Mounting the whole directory would hand
+    # this third-party image (telemetry on) mcpx's secrets/, .env and TLS key.
     volumes:
-      - ./:/etc/lunar-proxy
+      - ./gateway_config.yaml:/etc/lunar-proxy/gateway_config.yaml
+      - ./flows:/etc/lunar-proxy/flows
+      - ./quotas:/etc/lunar-proxy/quotas
+      - ./path_params:/etc/lunar-proxy/path_params
     environment:
       - TENANT_NAME=ORGANIZATION
       - LUNAR_API_KEY=8adb1fcd-30dd-4a99-ada4-653f2be8c225
       - LOG_LEVEL=ERROR
       - LUNAR_MANAGED=false
       - LUNAR_TELEMETRY=true
+    # Its own network: it cannot see mcpx, paperless-mcp or anything on ai-shared.
     networks:
-      - ai-shared
+      - lunar
 
   # NGINX SSL Proxy
   nginx-ssl:
@@ -106,14 +130,34 @@ services:
     container_name: mcpx-ssl-proxy
     restart: unless-stopped
     mem_limit: 128m
+    # Loopback only. This is the guarded front door to mcpx (see nginx.conf);
+    # Origin checks can be forged by non-browser clients, so it must not be
+    # reachable from the LAN or tailnet. :9222 fronts the host browser's
+    # DevTools protocol.
     ports:
-      - "9443:9443" # HTTPS MCPX API port
-      - "5443:5443" # HTTPS Control Plane UI port
-      - "9222:9222" # Chrome DevTools Protocol proxy port
+      - "127.0.0.1:9000:9000" # MCPX API port (SSE + streamable HTTP), guarded
+      - "127.0.0.1:9443:9443" # HTTPS MCPX API port, guarded
+      - "127.0.0.1:5443:5443" # HTTPS Control Plane UI port
+      - "127.0.0.1:9222:9222" # Chrome DevTools Protocol proxy port
       # Kapture WebSocket (61822) is now served by the kapture-server container
       # in mcps/kapture/docker-compose.yml — do NOT publish it here.
+    # AUTH_KEY is rendered into nginx-templates/ at start. It is therefore
+    # visible in `docker inspect` (Config.Env), as it is for mcpx; keeping it
+    # out would need a custom entrypoint script, which this stock image avoids.
+    env_file:
+      - ./secrets/mcpx-auth.env
+    environment:
+      # Browser Origin allowed to use the gateway (and given the injected key).
+      # Enable only while using the dashboard:
+      #   MCPX_DASHBOARD_ORIGIN=http://127.0.0.1:15173 docker compose up -d nginx-ssl
+      # and run plain `docker compose up -d nginx-ssl` afterwards to turn it off.
+      # The default is a never-matching regex, NOT a word like "off": any value
+      # here is something a non-browser caller can send as its Origin header.
+      # Do not put this variable in .env, or the dashboard stays on silently.
+      - MCPX_DASHBOARD_ORIGIN=${MCPX_DASHBOARD_ORIGIN:-~^(?!)}
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx-templates:/etc/nginx/templates:ro
       - ./certs/tls/cert.pem:/etc/ssl/certs/cert.pem:ro
       - ./certs/tls/key.pem:/etc/ssl/private/key.pem:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro # Disable default config
@@ -131,3 +175,5 @@ networks:
     # Each stack gets its own default network to prevent DNS collisions
   ai-shared:
     external: true
+  lunar:
+    # Isolation network for lunar-proxy only.

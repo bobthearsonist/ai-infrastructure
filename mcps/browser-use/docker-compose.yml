@@ -18,7 +18,7 @@ services:
         'run',
         '-i',
         '--rm',
-        '--network=ai-shared',
+        '--network=browser-use_default',
         '--name=browser-use-mcp',
         '--label=com.docker.compose.project=browser-use',
         '--label=com.docker.compose.service=browser-use-mcp',
@@ -38,8 +38,10 @@ services:
         'browser-use',
         '--mcp',
       ]
+    # Loopback only: this drives a real browser for whoever can reach it.
+    # Gateways reach it via host.docker.internal:7011.
     ports:
-      - '7011:7011'
+      - '127.0.0.1:7011:7011'
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -53,10 +55,7 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
-    networks:
-      - ai-infrastructure
-
-networks:
-  ai-infrastructure:
-    name: ai-shared
-    external: true
+    # Deliberately NOT on ai-shared, and neither are the browser-use-mcp
+    # containers it starts (--network=browser-use_default above, this project's
+    # own network). They render untrusted web pages; on ai-shared a hostile
+    # page could reach mcpx:9000/ws-ui (unauthenticated) and every MCP server.

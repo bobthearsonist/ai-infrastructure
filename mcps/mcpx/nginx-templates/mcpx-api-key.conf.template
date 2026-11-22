@@ -1,0 +1,45 @@
+# Rendered by the stock nginx image's envsubst step into /etc/nginx/conf.d at
+# container start, so the key never appears in a tracked file. Only the two
+# braced names are environment variables; the $http_* and $mcpx_* names are
+# nginx variables, left alone because envsubst only replaces variables that
+# are set.
+#
+# Fail-closed by construction: each map below lists "" explicitly. If AUTH_KEY
+# or MCPX_DASHBOARD_ORIGIN renders empty, that duplicates the "" key, `nginx -t`
+# fails, and the container does not start, instead of matching every caller.
+
+# 1 when the caller sent the real key itself.
+map $http_x_lunar_api_key $mcpx_client_key_ok {
+    default        0;
+    ""             0;
+    "${AUTH_KEY}"  1;
+}
+
+# Which browser Origin may talk to the gateway at all. The compose default is
+# the regex ~^(?!), which matches nothing, so every browser Origin is refused.
+# A literal sentinel such as "off" would be a bypass: it is a value any
+# non-browser caller can send. Set MCPX_DASHBOARD_ORIGIN to
+# http://127.0.0.1:15173 only while using the dashboard (see readme). While it
+# is set, any caller that reaches this proxy, including containers via
+# host.docker.internal, can forge that Origin and get the key.
+map $http_origin $mcpx_origin_ok {
+    default                    0;
+    ""                         1;
+    "${MCPX_DASHBOARD_ORIGIN}" 1;
+}
+
+# The dashboard cannot send the key, so its Origin gets the key injected.
+# Every other caller's own header is passed through unchanged.
+map $http_origin $mcpx_api_key {
+    default                    $http_x_lunar_api_key;
+    ""                         $http_x_lunar_api_key;
+    "${MCPX_DASHBOARD_ORIGIN}" "${AUTH_KEY}";
+}
+
+# Callers without an Origin (CLIs, scripts, containers) must present the key
+# here, before proxying. This is what protects /ws-ui, which mcpx itself never
+# authenticates; mcpx's own guard covers only /mcp, /sse and the REST API.
+map "$http_origin|$mcpx_client_key_ok" $mcpx_unauthenticated {
+    default 0;
+    "|0"    1;
+}

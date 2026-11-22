@@ -31,6 +31,7 @@ permissions:
         - browser
         - creative
         - code-quality
+        - paperless-read
     claude-desktop:
       _type: default-block
       consumerGroupKey: claude-desktop
@@ -47,6 +48,7 @@ permissions:
         - browser
         - creative
         - code-quality
+        - paperless-read
     vscode-copilot:
       _type: default-block
       consumerGroupKey: vscode-copilot
@@ -95,6 +97,7 @@ permissions:
         - browser
         - creative
         - code-quality
+        - paperless-read
     cline:
       _type: default-block
       consumerGroupKey: cline
@@ -211,8 +214,32 @@ toolGroups:
   - name: code-quality
     services:
       sonarqube: "*"
+  # Explicit read list, never "*": the server also exposes delete/bulk-edit/mail-rule
+  # tools. The Paperless token is view-only as well, so this is a second layer.
+  - name: paperless-read
+    services:
+      paperless:
+        - list_documents
+        - query_documents
+        - search_documents
+        - get_document
+        - get_document_content
+        - download_document
+        - list_document_notes
+        - list_tags
+        - list_correspondents
+        - get_correspondent
+        - list_document_types
+        - get_document_type
+        - list_custom_fields
+        - get_custom_field
+        - list_storage_paths
+# Requires x-lunar-api-key on MCP (/mcp, /sse) and REST control-plane routes.
+# The key comes from AUTH_KEY (secrets/mcpx-auth.env). Consumer tags below are
+# client-supplied labels, not identities: the key is the actual boundary.
+# The dashboard websocket (/ws-ui) is NOT covered by this; nginx guards it.
 auth:
-  enabled: false
+  enabled: true
 toolExtensions:
   services: {}
 targetServerAttributes:

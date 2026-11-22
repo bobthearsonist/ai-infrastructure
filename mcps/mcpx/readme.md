@@ -12,17 +12,23 @@ Image: `us-central1-docker.pkg.dev/prj-common-442813/mcpx/mcpx:latest` (0.4.x li
 
 | Use                  | HTTP                         | HTTPS                       |
 | -------------------- | ---------------------------- | --------------------------- |
-| MCP (SSE + HTTP)     | `localhost:9000/{sse,mcp}`   | `localhost:9443/{sse,mcp}`  |
-| Control Plane UI     | `localhost:5173/dashboard`   | `localhost:5443`            |
-| Metrics (Prometheus) | `localhost:3100`             | —                           |
+| MCP (SSE + HTTP)     | `127.0.0.1:9000/{sse,mcp}`   | `localhost:9443/{sse,mcp}`  |
+| Control Plane UI     | `127.0.0.1:15173/dashboard` (off by default, see Security) | not supported |
+| Metrics (Prometheus) | `127.0.0.1:3100`             | —                           |
+
+Everything is bound to `127.0.0.1`. The API on 9000/9443 requires the key. Metrics and the static UI files don't. The dashboard is on 15173, not mcpx's default 5173, because 5173 is Vite's default dev port. The HTTPS UI on 5443 can't work: its Origin isn't allowed.
 
 ## Connecting Claude Code
 
-Claude Code connects natively over streamable HTTP (no `mcp-remote` bridge). The `x-lunar-consumer-tag` header selects the `claude-code` consumer in `app.yaml`:
+Claude Code connects natively over streamable HTTP (no `mcp-remote` bridge). The `x-lunar-consumer-tag` header selects the `claude-code` consumer in `app.yaml`. The `x-lunar-api-key` header is required (see Security below):
 
 ```bash
-claude mcp add -t http -s user mcpx http://127.0.0.1:9000/mcp -H "x-lunar-consumer-tag: claude-code"
+claude mcp add -t http -s user mcpx http://127.0.0.1:9000/mcp \
+  -H "x-lunar-consumer-tag: claude-code" \
+  -H "x-lunar-api-key: <AUTH_KEY from secrets/mcpx-auth.env>"
 ```
+
+A client that reports `Dynamic Client Registration rejected ... Cannot POST /register` is missing or sending the wrong key: it got a 401 and fell back to OAuth discovery. Clients read their MCP config at startup, so restart them after changing it.
 
 Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `::1` first, where `wslrelay` holds `:9000` and resets the connection. Other clients: see [clients/](../../clients/readme.md).
 
@@ -40,7 +46,7 @@ Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `
 | qdrant-personal       | knowledge-personal | SSE               | `host.docker.internal:7020/servers/qdrant-personal/sse`       |
 | hass-mcp              | homelab            | SSE               | `mcpx-stdio-proxy:7030/servers/hass-mcp/sse` (uvx via proxy)  |
 | photoshop             | creative           | SSE               | `mcpx-stdio-proxy:7030/servers/photoshop/sse` (uvx via proxy) |
-| playwright            | browser            | SSE               | `mcp_playwright:7007/sse`                                     |
+| playwright            | browser            | SSE               | `host.docker.internal:7007/sse` (not on ai-shared; see Security) |
 | browser-use           | —                  | (disabled)        | in `_disabledMcpServers`                                      |
 
 ## Tool groups (app.yaml)
@@ -83,6 +89,35 @@ Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `
 2. Add it to a `toolGroups` entry in `app.yaml`. If new group, add the group name to `permissions.default.allow` and any consumer's `allow` that needs it.
 3. `docker compose restart mcpx`. Verify with `docker logs mcpx --tail 50 | grep -E "UpstreamHandler initialized|<your-name>"`.
 
+## Security
+
+mcpx is the front door to finance, Paperless and Home Assistant tools. The main hazard is mcpx's dashboard websocket (`/ws-ui`): it has no authentication, and it can rewrite tool permissions and add stdio servers, which means running commands inside mcpx. mcpx's own API-key guard does not cover it.
+
+| Layer | Where | What it stops | What it does not stop |
+| --- | --- | --- | --- |
+| Loopback-only ports | `docker-compose.yml` | LAN and tailnet hosts | Local processes and containers: any container can reach `host.docker.internal:9000` |
+| Host allowlist (421) | `nginx.conf` | DNS rebinding from web pages | Non-browser callers, which can send any Host |
+| Origin allowlist (403) | `nginx-templates/` | Every browser page; no browser Origin is allowed by default | Non-browser callers, which can forge Origin |
+| Key required without Origin (401) | `nginx-templates/` | CLIs, scripts and containers without the key, on every path including `/ws-ui` | A caller forging the dashboard Origin while the dashboard is enabled |
+| mcpx API key (`auth.enabled`) | `app.yaml` | Keyless calls to `/mcp`, `/sse` and REST that bypass nginx, e.g. `mcpx:9000` from `ai-shared` | `/ws-ui` reached directly on `mcpx:9000`; mcpx never checks it |
+| Not privileged | `docker-compose.yml` | Container escape after a compromise. `privileged` only served Docker-in-Docker, which no backend uses | |
+
+**Rule: nothing that renders untrusted content joins `ai-shared`.** Any container on `ai-shared` can open `mcpx:9000/ws-ui` directly, bypassing nginx and the key, and take over mcpx and with it every backend credential, including Paperless documents. It can also call `paperless-mcp:7015` directly with no auth. That is why the headless browsers (`mcps/playwright`, `mcps/browser-use` and the containers browser-use starts) stay on their own project networks. The gateways reach them on 127.0.0.1 through `host.docker.internal`. Every container that remains on `ai-shared` is trusted with all of the above.
+
+Off `ai-shared` is not the same as isolated. Through `host.docker.internal`, any container, the browsers included, can reach every port published on the host, even ports bound to 127.0.0.1. Only services that check Host and Origin or require a key are safe from them. mcpx on 9000 does. Never publish a forwarder that can reach `ai-shared`. `lunar-proxy` is one (it relays to whatever host the `x-lunar-host` header names), so it has no published ports and sits on its own network. mcpx also mounts this whole directory read-write, so a compromised mcpx could rewrite `nginx.conf`.
+
+**Using the dashboard.** The dashboard can't send the key, so nginx injects it for the dashboard's Origin, and only while that is enabled:
+
+```bash
+MCPX_DASHBOARD_ORIGIN=http://127.0.0.1:15173 docker compose up -d nginx-ssl   # on
+# open http://127.0.0.1:15173/dashboard
+docker compose up -d nginx-ssl                                               # off
+```
+
+While it is on, any caller that can reach nginx, including a container via `host.docker.internal`, can forge that Origin and get the key.
+
+**The key.** It lives in `secrets/mcpx-auth.env` (gitignored), with Keeper's `homelab` folder as the source of truth ("mcpx gateway API key"). It reaches nginx through `nginx-templates/`, which the stock image renders at start. It is visible in `docker inspect` for `mcpx` and `mcpx-ssl-proxy`. If `AUTH_KEY` or `MCPX_DASHBOARD_ORIGIN` is empty, nginx refuses to start rather than letting everything through. Consumer tags (`x-lunar-consumer-tag`) are client-supplied labels: any key holder can claim any consumer.
+
 ## HTTPS (optional)
 
 The `nginx-ssl` sidecar terminates TLS on `:9443` / `:5443`. Needs certs at `./certs/tls/{cert,key}.pem`:
@@ -97,7 +132,6 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 ## TODO
 
 - [ ] Make `app.yaml` per-machine-overridable like `mcp.json` already is (env-var-selected mount). Tracked in root [TODO.md](../../TODO.md) under "Conventions" alongside the agentgateway equivalent.
-- [ ] Configure authentication (API key or OAuth)
 - [ ] Test disconnection-safe caching with OpenCode
 - [ ] Set up consumer tags for per-client metrics
 - [ ] Compare to Atrax and MetaMCP as alternatives
