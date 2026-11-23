@@ -78,7 +78,13 @@ services:
     ports:
       - "127.0.0.1:${MITMPROXY_PORT:-18080}:8080"
     volumes:
-      - ./mitm_addon.py:/addon/mitm_addon.py:ro
+      # Mount the directory, not mitm_addon.py alone. If Docker Desktop restarts
+      # this container before its WSL bind source is available, it creates the
+      # missing source as a directory: a single-file bind then fails at container
+      # creation (exit 127) and the restart policy never retries it. A directory
+      # bind starts, mitmdump exits on "No such script", and the restart policy
+      # retries until the real directory is there.
+      - .:/addon:ro
       - ${MITMPROXY_CERTS:-~/.mitmproxy}:/home/mitmproxy/.mitmproxy
     environment:
       CONTEXT_LENS_INGEST_URL: "http://context-lens:4041/api/ingest"
