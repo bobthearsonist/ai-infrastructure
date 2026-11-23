@@ -8,10 +8,13 @@ services:
   # (the stdio-proxy has no docker socket and this image is Java/Docker-only).
   # https://github.com/SonarSource/sonarqube-mcp-server
   sonarqube-mcp:
-    image: sonarsource/sonarqube-mcp:latest
+    # Pinned by digest (the 2026-08-04 build): an upstream release can change or drop tools, and
+    # agent workflows depend on analyze_code_snippet. Upgrade deliberately: pull the new tag,
+    # check tools/list, then replace this digest.
+    image: sonarsource/sonarqube-mcp@sha256:edf80a38956d7d8de75166c1ae173b73c8a01a9a62038232ce0b75ead7dc450c
     container_name: sonarqube_mcp
     restart: unless-stopped
-    pull_policy: always   # match upstream's `docker run --pull=always` guidance
+    pull_policy: missing
     # The JVM is container-aware and takes MaxRAMPercentage (default 25%) of
     # this limit as max heap -- so 512m gave it only a 128m heap, which OOM'd
     # while downloading the javascript/kotlin analyzers on every boot. The OOM
@@ -30,6 +33,10 @@ services:
       - SONARQUBE_MCP_IN_CONTAINER=true
       # SONARQUBE_ORG present => SonarCloud (vs self-hosted Server).
       - SONARQUBE_ORG=${SONARQUBE_ORG:-profisee}
+      # Removes the write tools (change_sonar_issue_status, change_security_hotspot_status):
+      # every agent permission set auto-approves this server's tools, and accepting or
+      # dismissing a finding in SonarCloud is a decision for a person.
+      - SONARQUBE_READ_ONLY=true
       # :? => compose refuses to start (clear error) if the token is absent,
       # instead of launching a server that 401s on every request.
       - SONARQUBE_TOKEN=${SONARQUBE_TOKEN:?set SONARQUBE_TOKEN in mcps/sonarqube/.env or your shell env}
