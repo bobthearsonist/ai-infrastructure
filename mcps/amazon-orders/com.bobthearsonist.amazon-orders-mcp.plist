@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Amazon Orders MCP host bridge (LaunchAgent, NOT a LaunchDaemon).
+
+  Why a LaunchAgent, and why this is NOT a container:
+  amazon-orders authenticates by replaying a browser session. `amazon-orders
+  login --browser` opens Amazon's own sign-in page in a real browser and
+  persists the resulting jar to ~/.config/amazonorders/cookies.json (see
+  amazonauth.conf.DEFAULT_CONFIG_DIR). Two consequences:
+    1. The interactive sign-in needs a GUI session, which neither a
+       LaunchDaemon nor a Docker container has.
+    2. The credential at rest is a live Amazon session - order history,
+       addresses, payment-method tails. Running on the host keeps it in the
+       user's own home directory instead of inside the gateway container that
+       every MCP consumer shares.
+  Running here means no cookie jar is ever mounted into a container, and no
+  headless/remote sign-in flow is needed.
+
+  This bridge wraps the stdio MCP as an SSE endpoint on :7014 so the Dockerized
+  gateways (mcpx, agentgateway) can reach it via host.docker.internal:7014.
+
+  Host-specific paths (HOME, /opt/homebrew) are baked in deliberately: this
+  service is inherently tied to this Mac, because the session jar is. Install
+  via ./manage.sh install.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bobthearsonist.amazon-orders-mcp</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/npx</string>
+        <string>-y</string>
+        <!-- PINNED to 3.3.0 for the same reason as the Fantastical bridge, which
+             burned 335,704 crashes before it was diagnosed: 3.4.3's stdioToSse
+             shares ONE MCP SDK Server across SSE sessions, and
+             @modelcontextprotocol/sdk >= 1.26.0 throws "Already connected to a
+             transport" on the second connect(). 3.3.0 (PR #52) is the only
+             published release allocating a Server AND a pooled stdio child per
+             session. Do NOT float this to `supergateway` or :latest.
+             See ../fantastical/com.bobthearsonist.fantastical-mcp.plist for the
+             full post-mortem. -->
+        <string>supergateway@3.3.0</string>
+        <string>--stdio</string>
+        <!-- Deliberately UNPINNED. amazon-orders scrapes Amazon's HTML, and
+             upstream's README is explicit that older versions break as Amazon
+             changes its markup; the 6.0.0 changelog shows WAF challenge solvers
+             and encrypted order cards landing through 2026. uvx re-resolves to
+             latest and caches, so a pin here would freeze a scraper against a
+             moving target - the opposite of the `mcp<2` pin next door in
+             stdio-proxy, which freezes a library API that genuinely stopped
+             moving. -->
+        <string>/opt/homebrew/bin/uvx amazon-orders-mcp</string>
+        <string>--port</string>
+        <string>7014</string>
+        <string>--baseUrl</string>
+        <string>http://host.docker.internal:7014</string>
+        <string>--healthEndpoint</string>
+        <string>/healthz</string>
+        <string>--logLevel</string>
+        <string>info</string>
+        <!-- 3.3.0's stdio child pool. minConcurrency 1 pre-warms one
+             `uvx amazon-orders-mcp` at boot so the first gateway request does
+             not pay uvx cold-start.
+
+             maxConcurrency 8 (not the 2 the gateways strictly need) mirrors the
+             Fantastical bridge: 3.3.0 releases a pool slot from exactly one
+             place, `req.on('close')`, while sseTransport.onclose/.onerror only
+             delete the session. Every error-path disconnect therefore leaks a
+             slot permanently, and once the pool is full the handler blocks at
+             `pool.acquire()` BEFORE req.on('close') is registered - a one-way
+             ratchet into deadlock that KeepAlive cannot clear. 8 slots buys
+             weeks instead of days. MITIGATION, not a fix. -->
+        <string>--minConcurrency</string>
+        <string>1</string>
+        <string>--maxConcurrency</string>
+        <string>8</string>
+    </array>
+
+    <!-- launchd starts with a near-empty PATH; supergateway must find npx and
+         node, and must find uvx to spawn the MCP child.
+
+         HOME is load-bearing here, more than for most bridges: amazon-orders
+         resolves its config dir as expanduser("~")/.config/amazonorders. If HOME
+         is unset or wrong, the server starts fine and reports signed_in:false
+         forever, because it is looking for the jar in the wrong place. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/dislexicmofo</string>
+    </dict>
+
+    <!-- restart policy: equivalent of compose `restart: unless-stopped`.
+         To stop intentionally, use `manage.sh stop` (bootout).
+
+         As established on the Fantastical bridge: KeepAlive does NOT cover death
+         of the stdio CHILD (3.3.0's stdioProcessPool only logs child exit and
+         drops it from the pool; there is no process.exit), and --healthEndpoint
+         is an unconditional res.send('ok') with no reference to the child or the
+         pool. So /healthz is NOT a liveness signal. Use `manage.sh test`, which
+         probes the MCP handshake. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- Interactive: the MCP's own `sign_in` tool, if ever invoked directly on
+         the host, opens a real browser and needs the Aqua session. -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/dislexicmofo/Library/Logs/amazon-orders-mcp.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dislexicmofo/Library/Logs/amazon-orders-mcp.err.log</string>
+</dict>
+</plist>
