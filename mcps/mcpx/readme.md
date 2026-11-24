@@ -37,13 +37,13 @@ Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `
 | Server                | Group              | Transport         | URL / Source                                                  |
 | --------------------- | ------------------ | ----------------- | ------------------------------------------------------------- |
 | sequential-thinking   | core               | stdio (local npx) | spawned by mcpx                                               |
-| memory                | core               | stdio (local npx) | spawned by mcpx                                               |
+| memory                | core               | SSE               | `memory-mcp:7040/servers/memory/sse`                          |
 | kapture               | browser            | stdio (local npx) | spawned by mcpx                                               |
 | context7              | coding             | streamable-http   | `host.docker.internal:7008/mcp`                               |
 | qdrant-notes-work     | knowledge-notes-work  | SSE               | `host.docker.internal:7020/servers/qdrant-notes-work/sse`     |
 | qdrant-code-work      | knowledge-code-work   | SSE               | `host.docker.internal:7020/servers/qdrant-code-work/sse`      |
 | qdrant-code-public    | knowledge-code-public | SSE               | `host.docker.internal:7020/servers/qdrant-code-public/sse`    |
-| qdrant-personal       | knowledge-personal | SSE               | `host.docker.internal:7020/servers/qdrant-personal/sse`       |
+| qdrant-notes-personal | knowledge-notes-personal | SSE               | `host.docker.internal:7020/servers/qdrant-notes-personal/sse` |
 | hass-mcp              | homelab            | SSE               | `mcpx-stdio-proxy:7030/servers/hass-mcp/sse` (uvx via proxy)  |
 | photoshop             | creative           | SSE               | `mcpx-stdio-proxy:7030/servers/photoshop/sse` (uvx via proxy) |
 | playwright            | browser            | SSE               | `host.docker.internal:7007/sse` (not on ai-shared; see Security) |
@@ -58,7 +58,7 @@ Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `
 | knowledge-notes-work  | all consumers    | qdrant-notes-work             |
 | knowledge-code-work   | all consumers    | qdrant-code-work              |
 | knowledge-code-public | all consumers    | qdrant-code-public            |
-| knowledge-personal | all consumers    | qdrant-personal               |
+| knowledge-notes-personal | all consumers    | qdrant-notes-personal         |
 | devops             | all consumers    | azure-devops (not configured) |
 | diagrams           | all consumers    | mermaid (not configured)      |
 | homelab            | all consumers    | hass-mcp                      |

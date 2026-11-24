@@ -67,7 +67,7 @@ package "Shared MCPs (ai-shared)" as shared_mcps #FFF3E0 {
 package "Code Intelligence" as code_intel #ECEFF1 {
   package "qdrant stack (ai-shared)\n<b>semantic — vector RAG</b>" as qdrant_stack #FFF3E0 {
     component "qdrant-mcp\n:7020 (mcp-proxy)\n4 named servers · 8 tools" as qdrant_mcp #FFCC80
-    component "qdrant (vector DB)\n:6333 (HTTP) · :6334 (gRPC)\n""code-work__jina"" · ""code-public__jina""\n""notes-work"" · ""personal"" (empty)" as qdrant #CE93D8
+    component "qdrant (vector DB)\n:6333 (HTTP) · :6334 (gRPC)\n""code-work__jina"" · ""code-public__jina""\n""notes-work"" · ""notes-personal""" as qdrant #CE93D8
     component "obsidian-watcher\n(sidecar, :cpu image)" as obs_watcher #FFE0B2
     component "repo-watcher-work\n(sidecar, :gpu image)" as repo_watcher_work #FFE0B2
     component "repo-watcher-public\n(sidecar, :gpu image)" as repo_watcher_public #FFE0B2
@@ -206,11 +206,11 @@ Each stack is a self-contained `docker compose` unit. Stacks with a stdio-proxy 
 
 | Service | What it does | Host Ports |
 | ------- | ------------ | ---------- |
-| qdrant | Vector database for RAG embeddings. 4 collections: `code-work__jina`, `code-public__jina`, `notes-work`, `personal` (empty) | :6333 (HTTP), :6334 (gRPC) |
+| qdrant | Vector database for RAG embeddings. 4 collections: `code-work__jina`, `code-public__jina`, `notes-work`, `notes-personal` | :6333 (HTTP), :6334 (gRPC) |
 | qdrant-mcp | mcp-proxy hosting 4 named MCP servers (one per collection) from a single `servers.json`; FastEmbed-powered semantic search | :7020 |
 | repo-watcher-work | Watches `/repos`, reindexes into `code-work__jina` (`:gpu` image) | — |
 | repo-watcher-public | Watches `/repos`, reindexes into `code-public__jina` (`:gpu` image) | — |
-| obsidian-watcher | Watches `/vault`, reindexes into `notes-work` (`:cpu` image) | — |
+| obsidian-watcher | Watches `/vault`, routes `0 Profisee` into `notes-work` and the remaining eligible notes into `notes-personal` (`:cpu` image) | — |
 
 Three independent watchers, one per corpus — nothing coordinates them, and each holds its
 lockfile in its own container layer, so one lane can freeze silently while the others keep
@@ -322,7 +322,6 @@ Standalone MCPs run as their own containers on `ai-shared`. stdio MCPs run insid
 | [playwright](mcps/playwright/readme.md) | Standalone | Browser automation | ⬚ Available | [→](mcps/playwright/readme.md) |
 | [browser-use](mcps/browser-use/readme.md) | Standalone | AI browser automation | ⬚ Available | [→](mcps/browser-use/readme.md) |
 | [hass-mcp](mcps/hass-mcp/readme.md) | Standalone | Home Assistant | ⬚ Available | [→](mcps/hass-mcp/readme.md) |
-
 ### Platform Services
 
 | Service | Description | Status | Docs |
@@ -461,8 +460,7 @@ Single sorted reference. `Stack` is the compose project the port belongs to; int
 | 7007 | SSE/MCP | playwright | shared MCP | Standalone container (`mcps/playwright/`) — available |
 | 7008 | HTTP/MCP | context7 | shared MCP | Library documentation MCP |
 | 7010 | HTTP | hass-mcp | shared MCP | Home Assistant MCP — available |
-| 7011 | SSE/MCP | browser-use | shared MCP | AI browser automation — available |
-| 7020 | HTTP | qdrant-mcp | qdrant-mcp | Semantic search MCP |
+| 7011 | SSE/MCP | browser-use | shared MCP | AI browser automation — available || 7020 | HTTP | qdrant-mcp | qdrant-mcp | Semantic search MCP |
 | 7030 | HTTP | stdio-proxy | per-gateway | **Internal only** — stdio→SSE bridge inside each gateway stack |
 | 7040 | HTTP | memory | shared MCP | Knowledge graph MCP (singleton) |
 | 8080 | HTTP | mitmproxy | context-lens | HTTPS forward proxy (Copilot, Codex, etc.) |
@@ -605,4 +603,3 @@ See [Context Lens workflow details](docs/context-lens-cherry-pick-workflow.md) f
 - [Langfuse](https://langfuse.com/docs)
 - [mcpx / Lunar.dev](https://docs.lunar.dev/mcpx/architecture)
 - [Context Lens](https://github.com/larsderidder/context-lens)
-

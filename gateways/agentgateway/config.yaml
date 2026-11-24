@@ -48,24 +48,44 @@ binds:
                     - name: qdrant-code-public
                       sse:
                         host: http://qdrant-mcp:7020/servers/qdrant-code-public/sse
-                    - name: qdrant-personal
+                    - name: qdrant-notes-personal
                       sse:
-                        host: http://qdrant-mcp:7020/servers/qdrant-personal/sse
+                        host: http://qdrant-mcp:7020/servers/qdrant-notes-personal/sse
                     - name: context7
                       mcp:
                         host: http://context7-mcp:7008/mcp
-                    # Disabled on windows-work: no playwright (:7007) or browser-use (:7011)
-                    # host server runs here, and hass-mcp is not in stdio-proxy's servers
-                    # config. Any unreachable target aborts init for every target.
-                    # - name: playwright
-                    #   sse:
-                    #     host: http://host.docker.internal:7007/sse
-                    # - name: browser-use
-                    #   sse:
-                    #     host: http://host.docker.internal:7011/sse
-                    # - name: hass-mcp
-                    #   sse:
-                    #     host: http://agentgateway-stdio-proxy:7030/servers/hass-mcp/sse
+                    # Mac (home) only. On windows-work none of the targets below
+                    # exist (no playwright :7007, browser-use :7011, hass-mcp,
+                    # monarch-money or fantastical) and any unreachable target
+                    # aborts init for every target, so comment them out there.
+                    - name: playwright
+                      sse:
+                        host: http://host.docker.internal:7007/sse
+                    - name: browser-use
+                      sse:
+                        host: http://host.docker.internal:7011/sse
+                    - name: hass-mcp
+                      sse:
+                        host: http://agentgateway-stdio-proxy:7030/servers/hass-mcp/sse
+                    # Monarch Money (personal finance) — standalone container on
+                    # ai-shared, NOT via stdio-proxy. Exposes all 8 colvint tools
+                    # incl. create_transaction/update_transaction; read-only is
+                    # enforced at the Claude Code permission layer (permissions.yaml)
+                    # since agentgateway can't filter per-tool. mcpx DOES filter
+                    # writes out at its toolGroup (see mcps/mcpx/app.yaml).
+                    - name: monarch-money
+                      sse:
+                        host: http://monarch-money-mcp:7012/servers/monarch-money/sse
+                    # Fantastical calendar — HOST bridge, NOT a container. It
+                    # drives Fantastical.app via AppleScript/EventKit/TCC, which
+                    # only work in the macOS GUI session. A supergateway
+                    # LaunchAgent on the host exposes it on :7013; the container
+                    # reaches back via host.docker.internal. See mcps/fantastical/.
+                    # Writes (create/update) are gated at the client permission
+                    # layer — agentgateway can't filter per-tool.
+                    - name: fantastical
+                      sse:
+                        host: http://host.docker.internal:7013/sse
                     # TODO: azure-devops — not yet configured in stdio-proxy/servers.home.json.
                     # Enabling this target without a matching servers.json entry makes
                     # stdio-proxy 404 on /servers/azure-devops/sse, which aborts the

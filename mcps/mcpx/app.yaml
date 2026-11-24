@@ -7,7 +7,7 @@ permissions:
       - knowledge-notes-work
       - knowledge-code-work
       - knowledge-code-public
-      - knowledge-personal
+      - knowledge-notes-personal
       - devops
       - diagrams
       - homelab
@@ -24,13 +24,15 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
         - browser
         - creative
         - code-quality
+        - personal-finance
+        - calendar
         - paperless-read
     claude-desktop:
       _type: default-block
@@ -41,13 +43,15 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
         - browser
         - creative
         - code-quality
+        - personal-finance
+        - calendar
         - paperless-read
     vscode-copilot:
       _type: default-block
@@ -58,7 +62,7 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
@@ -74,7 +78,7 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
@@ -94,7 +98,9 @@ permissions:
         - diagrams
         - homelab
         - creative
-        - knowledge-personal
+        - knowledge-notes-personal
+        - personal-finance
+        - calendar
         - paperless-read
     opencode:
       _type: default-block
@@ -105,13 +111,15 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
         - browser
         - creative
         - code-quality
+        - personal-finance
+        - calendar
         - paperless-read
     cline:
       _type: default-block
@@ -122,7 +130,7 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
@@ -138,7 +146,7 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
@@ -154,7 +162,7 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
@@ -170,7 +178,7 @@ permissions:
         - knowledge-notes-work
         - knowledge-code-work
         - knowledge-code-public
-        - knowledge-personal
+        - knowledge-notes-personal
         - devops
         - diagrams
         - homelab
@@ -219,16 +227,48 @@ toolGroups:
   - name: browser
     services:
       playwright: "*"
-      kapture: "*"
   - name: creative
     services:
       photoshop: "*"
-  - name: knowledge-personal
+  - name: knowledge-notes-personal
     services:
-      qdrant-personal: "*"
+      qdrant-notes-personal: "*"
   - name: code-quality
     services:
       sonarqube: "*"
+  - name: personal-finance
+    services:
+      monarch-money:
+        - check_auth_status
+        - get_accounts
+        - get_account_holdings
+        - get_account_history
+        - get_account_snapshots_by_type
+        - get_account_type_options
+        - get_recent_account_balances
+        - get_aggregate_snapshots
+        - get_transactions
+        - get_transaction_details
+        - get_transaction_categories
+        - get_transaction_category_groups
+        - get_transaction_tags
+        - get_transaction_splits
+        - get_transactions_summary
+        - get_recurring_transactions
+        - get_budgets
+        - get_cashflow
+        - get_cashflow_summary
+        - get_credit_history
+        - get_institutions
+        - get_subscription_details
+        - get_transaction_rules
+        - find_merchant_id_by_name
+        - get_account_transfer_eligibility
+        - preview_account_data_transfer
+        - get_account_data_transfer_status
+  - name: calendar
+    services:
+      fantastical: "*"
   # Explicit read list, never "*": the server also exposes delete/bulk-edit/mail-rule
   # tools. The Paperless token is view-only as well, so this is a second layer.
   - name: paperless-read
