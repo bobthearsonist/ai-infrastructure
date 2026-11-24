@@ -73,6 +73,11 @@
       "type": "sse",
       "icon": "#FF3B30"
     },
+    "amazon-orders": {
+      "url": "http://host.docker.internal:7014/sse",
+      "type": "sse",
+      "icon": "#FF9900"
+    },
     "paperless": {
       "url": "http://paperless-mcp:7015/servers/paperless/sse",
       "type": "sse",

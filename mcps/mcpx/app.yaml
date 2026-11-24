@@ -266,6 +266,18 @@ toolGroups:
         - get_account_transfer_eligibility
         - preview_account_data_transfer
         - get_account_data_transfer_status
+      amazon-orders:
+        - find_charge
+        - get_orders
+        - search_orders
+        - get_order
+        - get_tracking
+        - get_invoices
+        - get_transactions
+        - get_gift_cards
+        - get_prime_payments
+        - check_session
+        - get_config
   - name: calendar
     services:
       fantastical: "*"

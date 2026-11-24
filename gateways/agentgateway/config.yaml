@@ -56,8 +56,9 @@ binds:
                         host: http://context7-mcp:7008/mcp
                     # Mac (home) only. On windows-work none of the targets below
                     # exist (no playwright :7007, browser-use :7011, hass-mcp,
-                    # monarch-money or fantastical) and any unreachable target
-                    # aborts init for every target, so comment them out there.
+                    # monarch-money, fantastical or amazon-orders) and any
+                    # unreachable target aborts init for every target, so comment
+                    # them out there.
                     - name: playwright
                       sse:
                         host: http://host.docker.internal:7007/sse
@@ -86,6 +87,22 @@ binds:
                     - name: fantastical
                       sse:
                         host: http://host.docker.internal:7013/sse
+                    # Amazon order history — HOST bridge, NOT a container, and
+                    # THIS MACHINE ONLY. It replays a browser session persisted to
+                    # ~/.config/amazonorders/cookies.json in this user's home, and
+                    # the interactive sign-in needs the macOS GUI session, so the
+                    # target is meaningless on any other host. A supergateway
+                    # LaunchAgent exposes it on :7014. See mcps/amazon-orders/.
+                    #
+                    # NOTE the exposure difference from mcpx: agentgateway can't
+                    # filter per-tool, so this target carries ALL 13 tools,
+                    # including `sign_in` (triggers a browser auth flow) and
+                    # `update_config`. mcpx deliberately exposes only 11 read
+                    # tools (see mcps/mcpx/app.yaml). Gate the two writes at the
+                    # client permission layer, as with monarch-money above.
+                    - name: amazon-orders
+                      sse:
+                        host: http://host.docker.internal:7014/sse
                     # TODO: azure-devops — not yet configured in stdio-proxy/servers.home.json.
                     # Enabling this target without a matching servers.json entry makes
                     # stdio-proxy 404 on /servers/azure-devops/sse, which aborts the

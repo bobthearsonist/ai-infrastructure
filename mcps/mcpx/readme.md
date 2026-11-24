@@ -47,7 +47,23 @@ Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `
 | hass-mcp              | homelab            | SSE               | `mcpx-stdio-proxy:7030/servers/hass-mcp/sse` (uvx via proxy)  |
 | photoshop             | creative           | SSE               | `mcpx-stdio-proxy:7030/servers/photoshop/sse` (uvx via proxy) |
 | playwright            | browser            | SSE               | `host.docker.internal:7007/sse` (not on ai-shared; see Security) |
+| monarch-money         | personal-finance   | SSE               | `monarch-money-mcp:7012/servers/monarch-money/sse`            |
+| fantastical           | calendar           | SSE               | `host.docker.internal:7013/sse` (host bridge, not a container) |
+| amazon-orders         | personal-finance   | SSE               | `host.docker.internal:7014/sse` (host bridge, not a container) |
+| paperless             | paperless-read     | SSE               | `paperless-mcp:7015/servers/paperless/sse`                    |
 | browser-use           | —                  | (disabled)        | in `_disabledMcpServers`                                      |
+
+`fantastical` and `amazon-orders` are launchd LaunchAgents on the host, **this
+machine only** — see `mcps/fantastical/` and `mcps/amazon-orders/`. They are not
+containers and are not on `ai-shared`; mcpx reaches them via
+`host.docker.internal`. Restarting either one orphans mcpx's upstream SSE session
+to it, after which its tools fail with `-32602` until mcpx is bounced
+(`docker stop -t 30 mcpx` + `docker start mcpx` — never `docker restart`).
+
+> Known inconsistency, not resolved here: this table has long listed `playwright`
+> at `host.docker.internal:7007/sse`, matching the Security note below, while
+> `mcp.json` actually has `http://mcp_playwright:7007/sse`. One of the two is
+> stale. Worth settling, but it predates and is unrelated to the rows above.
 
 ## Tool groups (app.yaml)
 
@@ -64,6 +80,24 @@ Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `
 | homelab            | all consumers    | hass-mcp                      |
 | browser            | all consumers    | playwright, kapture           |
 | creative           | all consumers    | photoshop                     |
+| code-quality       | all consumers    | sonarqube                     |
+| personal-finance   | claude-code, claude-desktop, copilot-cli, opencode | monarch-money (27 read tools), amazon-orders (11 read tools) |
+| calendar           | claude-code, claude-desktop, copilot-cli, opencode | fantastical                   |
+| paperless-read     | claude-code, claude-desktop, copilot-cli | paperless           |
+
+Note the right-hand column: `personal-finance`, `calendar` and `paperless-read`
+are **not** granted to every consumer — the work copilots (`vscode-copilot`,
+`vscode-insiders-copilot`) and the remaining clients are deliberately excluded
+from personal financial, calendar and document data. Every other group is
+all-consumers.
+
+Both services in `personal-finance` carry an **explicit read-only tool
+allowlist**, never `"*"`. For monarch-money that followed a `"*"` once exposing
+all 39 tools including `delete_account`; amazon-orders follows the same
+discipline, withholding `sign_in` (would let any consumer trigger a browser auth
+flow) and `update_config`. agentgateway cannot filter per-tool, so the same
+backends reached through *that* gateway expose everything — gate writes at the
+client permission layer there.
 
 ## Configuration
 
