@@ -1,47 +1,59 @@
 name: neko
 
-# Logged-in "personal" browser: real Google Chrome you sign into by hand through
-# the neko viewer, then drive from agents via Playwright MCP over CDP.
+# Logged-in "personal" browser: Chromium you sign into by hand through a web
+# viewer, then drive from agents via Playwright MCP over CDP.
 # Why: Google refuses sign-in in Playwright-launched Chromium; a normally launched
-# Chrome signed in by a human, attached to later over CDP, is not flagged.
+# browser signed in by a human, attached to later over CDP, is not flagged.
+#
+# Viewer: linuxserver/chromium (Selkies). The screen streams over a websocket on
+# the HTTP port, so nothing depends on WebRTC media ports. The neko image
+# (config/google-chrome.conf) never got WebRTC through Docker Desktop's macOS
+# port forwarder; it remains an option on hosts with real host networking.
 #
 # Security model (see mcpx readme "Security"):
 #  - Deliberately NOT on ai-shared. This browser holds live sessions and renders
 #    untrusted pages.
 #  - Everything published on 127.0.0.1 only. CDP (9222) is never published: the
-#    playwright sidecar shares neko's network namespace and reaches it on loopback.
+#    playwright sidecar shares the browser's network namespace and reaches it on
+#    loopback.
 #  - Anything that can reach 127.0.0.1:7016 can act as you on every signed-in site.
 
 services:
-  neko-personal:
-    image: ghcr.io/m1k1o/neko/google-chrome:latest
-    container_name: neko_personal
+  chromium-personal:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: chromium_personal
     restart: unless-stopped
     shm_size: 2gb
-    env_file: ./secrets/neko.env
+    security_opt:
+      - seccomp:unconfined   # linuxserver: Chromium needs syscalls Docker's default profile blocks
+    env_file: ./secrets/chromium.env   # CUSTOM_USER / PASSWORD: viewer basic auth
     environment:
-      NEKO_DESKTOP_SCREEN: 1600x1000@30
-      NEKO_MEMBER_PROVIDER: multiuser
-      NEKO_WEBRTC_ICELITE: '1'
-      NEKO_WEBRTC_NAT1TO1: 127.0.0.1
-      # TCP-only media. UDP (mux and port range) never completed DTLS through
-      # Docker Desktop's macOS port forwarder: viewer logs in, video never starts.
-      NEKO_WEBRTC_TCPMUX: '52100'
+      PUID: '1000'
+      PGID: '1000'
+      TZ: America/New_York
+      # No terminal, sudo, file transfer or app launcher in the viewer desktop.
+      HARDEN_DESKTOP: 'true'
+      # Appended after the wrapper's own flags, so this --user-data-dir wins.
+      # Profile is off Chromium's default dir: Chromium >=136 ignores
+      # --remote-debugging-port on the default profile. CDP binds loopback only.
+      CHROME_CLI: >-
+        --user-data-dir=/config/profile
+        --remote-debugging-port=9222
+        --no-first-run
+        --no-default-browser-check
     volumes:
-      - ./data/personal-profile:/home/neko/profile
-      - ./config/google-chrome.conf:/etc/neko/supervisord/google-chrome.conf:ro
-      - ./config/policies.json:/etc/opt/chrome/policies/managed/policies.json:ro
+      - ./data/chromium-config:/config
+      - ./config/policies.json:/etc/chromium/policies/managed/policies.json:ro
     ports:
-      - '127.0.0.1:8091:8080'        # neko viewer  http://localhost:8091
-      - '127.0.0.1:52100:52100/tcp'  # WebRTC media (ICE-TCP)
-      - '127.0.0.1:7016:7016'        # playwright-personal MCP (sidecar below)
+      - '127.0.0.1:8091:3000'   # viewer  http://localhost:8091
+      - '127.0.0.1:7016:7016'   # playwright-personal MCP (sidecar below)
 
   mcp-playwright-personal:
     image: mcr.microsoft.com/playwright/mcp:latest
     container_name: mcp_playwright_personal
     restart: unless-stopped
-    network_mode: 'service:neko-personal'
-    depends_on: [neko-personal]
+    network_mode: 'service:chromium-personal'
+    depends_on: [chromium-personal]
     command:
       - '--cdp-endpoint=http://127.0.0.1:9222'
       - '--host=0.0.0.0'
