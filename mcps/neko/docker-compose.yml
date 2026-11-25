@@ -1,0 +1,56 @@
+name: neko
+
+# Logged-in "personal" browser: real Google Chrome you sign into by hand through
+# the neko viewer, then drive from agents via Playwright MCP over CDP.
+# Why: Google refuses sign-in in Playwright-launched Chromium; a normally launched
+# Chrome signed in by a human, attached to later over CDP, is not flagged.
+#
+# Security model (see mcpx readme "Security"):
+#  - Deliberately NOT on ai-shared. This browser holds live sessions and renders
+#    untrusted pages.
+#  - Everything published on 127.0.0.1 only. CDP (9222) is never published: the
+#    playwright sidecar shares neko's network namespace and reaches it on loopback.
+#  - Anything that can reach 127.0.0.1:7016 can act as you on every signed-in site.
+
+services:
+  neko-personal:
+    image: ghcr.io/m1k1o/neko/google-chrome:latest
+    container_name: neko_personal
+    restart: unless-stopped
+    shm_size: 2gb
+    env_file: ./secrets/neko.env
+    environment:
+      NEKO_DESKTOP_SCREEN: 1600x1000@30
+      NEKO_MEMBER_PROVIDER: multiuser
+      NEKO_WEBRTC_ICELITE: '1'
+      NEKO_WEBRTC_NAT1TO1: 127.0.0.1
+      # TCP-only media. UDP (mux and port range) never completed DTLS through
+      # Docker Desktop's macOS port forwarder: viewer logs in, video never starts.
+      NEKO_WEBRTC_TCPMUX: '52100'
+    volumes:
+      - ./data/personal-profile:/home/neko/profile
+      - ./config/google-chrome.conf:/etc/neko/supervisord/google-chrome.conf:ro
+      - ./config/policies.json:/etc/opt/chrome/policies/managed/policies.json:ro
+    ports:
+      - '127.0.0.1:8091:8080'        # neko viewer  http://localhost:8091
+      - '127.0.0.1:52100:52100/tcp'  # WebRTC media (ICE-TCP)
+      - '127.0.0.1:7016:7016'        # playwright-personal MCP (sidecar below)
+
+  mcp-playwright-personal:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: mcp_playwright_personal
+    restart: unless-stopped
+    network_mode: 'service:neko-personal'
+    depends_on: [neko-personal]
+    command:
+      - '--cdp-endpoint=http://127.0.0.1:9222'
+      - '--host=0.0.0.0'
+      - '--port=7016'
+      - '--allowed-hosts'
+      - 'host.docker.internal,host.docker.internal:7016,localhost,localhost:7016,127.0.0.1,127.0.0.1:7016'
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "const net = require(\"net\"); const s = net.connect(7016, () => { s.end(); process.exit(0); }); s.on(\"error\", () => process.exit(1));"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
