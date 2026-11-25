@@ -342,7 +342,7 @@ See `indexer.yaml.example` for all options. Key settings:
 
 | Setting | Description |
 |---|---|
-| `vault_path` | Path to Obsidian vault (machine-specific) |
+| `vault_path` + `default_vault` | Root holding every vault, and which vault to index (machine-specific) |
 | `collections` | List of Qdrant collections to use |
 | `routing` | Maps folder patterns to collections |
 | `skip_unrouted` | `true` = skip unmatched files, `false` = use default_collection |

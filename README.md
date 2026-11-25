@@ -416,7 +416,7 @@ docker compose up -d
 ```bash
 cd mcps/qdrant-mcp
 # Set vault + repos paths from local config (used by watcher sidecars)
-export VAULT_PATH="$(yq '.obsidian.vault_path' ~/ai/local.yaml)"
+export VAULT_PATH="$(~/ai/skills/obsidian-notes/scripts/vault.sh --default)"
 export REPOS_BASE="$(yq '.repos.base_path' ~/ai/local.yaml)"
 docker compose up -d --build
 ```
