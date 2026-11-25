@@ -2,8 +2,8 @@
 
 A Chromium you sign in to by hand (Google, Amazon, ...) through a web viewer,
 which agents then drive as you through Playwright MCP over CDP. mcpx exposes it
-as `playwright-personal` (tool group `browser-personal`, granted only to
-`claude-code` and `claude-desktop`). Untrusted browsing belongs on the clean
+as `playwright-personal` (tool group `browser-personal`; `mcps/mcpx/app.yaml`
+lists the consumers granted it). Untrusted browsing belongs on the clean
 `mcps/playwright` browser instead.
 
 Google refuses sign-in in Playwright-launched browsers; a normally launched

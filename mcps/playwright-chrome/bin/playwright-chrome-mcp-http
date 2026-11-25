@@ -1,0 +1,15 @@
+#!/bin/bash
+# HTTP Playwright MCP attached to the real Chrome profile through the Playwright
+# MCP Bridge extension, for mcpx (http://host.docker.internal:7017/mcp).
+# Listens on loopback only. Token lives in ~/.config/playwright-mcp/token.env.
+source ~/.nvm/nvm.sh && nvm use 20.11.1 --silent
+set -a; source ~/.config/playwright-mcp/token.env; set +a
+# Open the extension's connect page through LaunchServices instead of letting
+# Playwright read Chrome's profile folder, which macOS blocks for these processes.
+export PLAYWRIGHT_MCP_EXECUTABLE_PATH="$HOME/.local/bin/playwright-chrome-open"
+PORT="${PLAYWRIGHT_CHROME_PORT:-7017}"
+# --shared-browser-context: every MCP client (mcpx, scripts) shares one extension
+# connection and one tab group instead of opening a new one per session.
+exec npx -y @playwright/mcp@latest --extension --shared-browser-context \
+  --session-name "agents" --host 127.0.0.1 --port "$PORT" \
+  --allowed-hosts "host.docker.internal,host.docker.internal:$PORT,localhost,localhost:$PORT,127.0.0.1,127.0.0.1:$PORT"

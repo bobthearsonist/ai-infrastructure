@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Shared Playwright MCP for the user's real Chrome (LaunchAgent, not a container).
+
+  Runs @playwright/mcp in extension mode: it drives the signed-in Chrome profile
+  through the Playwright MCP Bridge extension, so it must run on the host in the
+  user's GUI session. One instance serves every agent: mcpx reaches it at
+  http://host.docker.internal:7017/sse and exposes it as `playwright-chrome`.
+  --shared-browser-context keeps all clients on one extension connection and one
+  tab group instead of a new connection per MCP session.
+
+  The launcher (bin/playwright-chrome-mcp-http, installed to ~/.local/bin) loads
+  the extension token from ~/.config/playwright-mcp/token.env and opens the
+  extension's connect page through LaunchServices (bin/playwright-chrome-open),
+  because macOS blocks these processes from reading Chrome's profile folder.
+
+  Listens on 127.0.0.1 only. Anything that reaches :7017 can act as the user in
+  their real Chrome, including every signed-in site.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bobthearsonist.playwright-chrome-mcp</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/dislexicmofo/.local/bin/playwright-chrome-mcp-http</string>
+    </array>
+
+    <!-- launchd starts with a near-empty environment; the launcher sources nvm
+         from HOME to find node/npx. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/dislexicmofo</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- Interactive: opens the extension's connect page in the user's Chrome. -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/dislexicmofo/Library/Logs/playwright-chrome-mcp.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dislexicmofo/Library/Logs/playwright-chrome-mcp.err.log</string>
+</dict>
+</plist>
