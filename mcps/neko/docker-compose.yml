@@ -40,7 +40,12 @@ services:
       # page open in the host browser reuse its cached basic-auth credentials to
       # drive this browser. Listed explicitly because nginx forwards Host without
       # the port, so Selkies' same-origin fallback would not match.
-      SELKIES_ALLOWED_ORIGINS: 'http://localhost:8091,http://127.0.0.1:8091'
+      # NEKO_TAILNET_ORIGIN (machine-specific, set in the gitignored .env next to
+      # this file) adds the tailnet-only Tailscale Serve front end for phone
+      # access, e.g. https://<machine>.<tailnet>.ts.net:8443 served by:
+      #   tailscale serve --bg --https=8443 http://127.0.0.1:8091
+      # Unset, the allowlist stays loopback-only and remote viewers get a 403.
+      SELKIES_ALLOWED_ORIGINS: 'http://localhost:8091,http://127.0.0.1:8091${NEKO_TAILNET_ORIGIN:+,}${NEKO_TAILNET_ORIGIN:-}'
       # Appended after the wrapper's own flags, so this --user-data-dir wins.
       # Profile is off Chromium's default dir: Chromium >=136 ignores
       # --remote-debugging-port on the default profile. CDP binds loopback only.
