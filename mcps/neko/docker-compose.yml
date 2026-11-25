@@ -25,7 +25,10 @@ services:
     restart: unless-stopped
     shm_size: 2gb
     security_opt:
-      - seccomp:unconfined   # linuxserver: Chromium needs syscalls Docker's default profile blocks
+      # Chromium's own sandbox (enabled via config/wrapped-chromium) needs
+      # namespace syscalls Docker's default seccomp profile blocks. Tested on
+      # Docker Desktop: default seccomp + sandbox fails with "No usable sandbox".
+      - seccomp:unconfined
     env_file: ./secrets/chromium.env   # CUSTOM_USER / PASSWORD: viewer basic auth
     environment:
       PUID: '1000'
@@ -33,6 +36,11 @@ services:
       TZ: America/New_York
       # No terminal, sudo, file transfer or app launcher in the viewer desktop.
       HARDEN_DESKTOP: 'true'
+      # Cross-site WebSocket-hijacking guard. The image ships '*', which lets any
+      # page open in the host browser reuse its cached basic-auth credentials to
+      # drive this browser. Listed explicitly because nginx forwards Host without
+      # the port, so Selkies' same-origin fallback would not match.
+      SELKIES_ALLOWED_ORIGINS: 'http://localhost:8091,http://127.0.0.1:8091'
       # Appended after the wrapper's own flags, so this --user-data-dir wins.
       # Profile is off Chromium's default dir: Chromium >=136 ignores
       # --remote-debugging-port on the default profile. CDP binds loopback only.
@@ -44,6 +52,7 @@ services:
     volumes:
       - ./data/chromium-config:/config
       - ./config/policies.json:/etc/chromium/policies/managed/policies.json:ro
+      - ./config/wrapped-chromium:/usr/bin/wrapped-chromium:ro
     ports:
       - '127.0.0.1:8091:3000'   # viewer  http://localhost:8091
       - '127.0.0.1:7016:7016'   # playwright-personal MCP (sidecar below)
