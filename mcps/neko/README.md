@@ -62,6 +62,13 @@ When bumping the image, diff `config/wrapped-chromium` against the image's
 - `127.0.0.1:7016` (the MCP endpoint) has no authentication, and every
   container on the host can reach it through `host.docker.internal`. Anything
   that reaches it can act as you on every signed-in site.
+- mcpx exposes `playwright-personal` through an explicit tool list in
+  `mcps/mcpx/app.yaml` (group `browser-personal`) that withholds
+  `browser_run_code_unsafe` (arbitrary code, can reach the Keeper extension)
+  and `browser_network_request(s)` (full headers and bodies). New upstream
+  tools stay hidden until listed there.
+- Page snapshots include form field values, passwords included, so an agent
+  must not snapshot a page where a credential has been filled in.
 - Keeper stays usable in this browser by design. Agent behaviour around it,
   sign-in hand-off and page-content prompt injection is governed by prompt
   guardrails: a user-level Claude Code rule (`~/.claude/rules/`) and the same
