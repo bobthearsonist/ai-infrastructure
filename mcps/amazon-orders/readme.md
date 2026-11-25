@@ -64,10 +64,11 @@ Probes the MCP handshake, **not** `/healthz`. In supergateway 3.3.0 the health e
 unconditional `res.send('ok')` with no reference to the child process or the pool, so it reports
 healthy on a completely dead bridge — it did exactly that on the Fantastical bridge for 12 days.
 
-Through the gateway, from a client that mcpx identifies as an allowed consumer:
+Through the gateway, call a tool from a client that mcpx identifies as an allowed consumer —
+`check_session` is the cheapest, and returns `signed_in` without touching order data:
 
-```bash
-docker restart mcpx
+```
+mcp__mcpx__amazon-orders__check_session
 ```
 
 Note that mcpx's own `tools/list` names tools `<service>__<tool>` (e.g. `amazon-orders__find_charge`);
@@ -148,8 +149,10 @@ use, not last login.
 - `HOME` is load-bearing in the plist. `amazon-orders` resolves its config dir from
   `expanduser("~")`; with `HOME` unset or wrong under launchd the server starts cleanly and reports
   `signed_in: false` forever, because it is looking for the jar in the wrong place.
-- `docker restart mcpx` has been observed to leave the gateway in a crash loop — its entrypoint
-  waits on an inner Docker-in-Docker daemon and fails with `containerd is still running pid=58` /
-  `failed to save daemon pid to disk`, because `restart` does not tear down the container's PID
-  namespace. Recover with a full `docker stop -t 30 mcpx` then `docker start mcpx`. Unrelated to
-  this service, but it will bite anyone following the "restart mcpx after editing app.yaml" step.
+- `docker restart mcpx` is safe as of 561e3e8 (2026-11-22). It was not before: while mcpx ran
+  with `privileged: true` its entrypoint waited on an inner Docker-in-Docker daemon, and `restart`
+  leaves the container's PID namespace intact, so the stale inner pid killed the new daemon
+  (`failed to save daemon pid to disk` / `containerd is still running pid=58`) in a ~45s loop.
+  That commit dropped `privileged`; the entrypoint now logs `privileged=no, skipping docker` and
+  the `wait_for_docker` call is unreachable. The hazard returns only if `privileged` does — which
+  the compose file says to revisit if a stdio MCP launched with `command: docker` is ever added.

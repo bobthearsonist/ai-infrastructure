@@ -122,11 +122,13 @@ case "$cmd" in
     # while `$0 test` reports the bridge perfectly healthy. The parameters are
     # fine; the session is dead. Only bouncing mcpx fixes it.
     #
-    # stop+start, NEVER `docker restart`: mcpx is privileged Docker-in-Docker and
-    # `restart` leaves the container's PID namespace intact, so the inner
-    # daemon's stale pid survives and the new one dies with "failed to save
-    # daemon pid to disk: process with PID N is still running", looping every
-    # ~45s indefinitely. A real stop tears the namespace down.
+    # stop+start rather than `docker restart`. Both work now; this is the form
+    # that stays correct if mcpx ever runs privileged again. Under
+    # `privileged: true` the entrypoint waited on an inner Docker-in-Docker
+    # daemon, and `restart` left the PID namespace intact, so the stale inner
+    # pid killed the new daemon ("failed to save daemon pid to disk: process
+    # with PID N is still running") in a ~45s loop. `privileged` was dropped in
+    # 561e3e8 (2026-11-22) and the entrypoint now skips docker entirely.
     echo "bouncing mcpx (this briefly takes down EVERY mcpx-served MCP)..."
     docker stop -t 30 mcpx
     docker start mcpx

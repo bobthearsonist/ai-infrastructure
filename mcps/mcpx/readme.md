@@ -58,7 +58,16 @@ machine only** — see `mcps/fantastical/` and `mcps/amazon-orders/`. They are n
 containers and are not on `ai-shared`; mcpx reaches them via
 `host.docker.internal`. Restarting either one orphans mcpx's upstream SSE session
 to it, after which its tools fail with `-32602` until mcpx is bounced
-(`docker stop -t 30 mcpx` + `docker start mcpx` — never `docker restart`).
+(`docker restart mcpx` is fine — see below).
+
+> `docker restart mcpx` used to be unsafe and no longer is. While this service
+> ran with `privileged: true`, the entrypoint waited on an inner Docker-in-Docker
+> daemon, and `restart` left the PID namespace intact so the stale inner pid
+> killed the new daemon in a ~45s loop. `privileged` was dropped in 561e3e8
+> (2026-11-22); the entrypoint now logs `privileged=no, skipping docker` and
+> never calls `wait_for_docker`, so the loop is unreachable. If a stdio MCP
+> launched with `command: docker` is ever added and `privileged` comes back,
+> this hazard returns with it — use `docker stop -t 30` + `docker start` then.
 
 > Known inconsistency, not resolved here: this table has long listed `playwright`
 > at `host.docker.internal:7007/sse`, matching the Security note below, while
