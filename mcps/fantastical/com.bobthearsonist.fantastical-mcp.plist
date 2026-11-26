@@ -3,9 +3,11 @@
 <!--
   Fantastical MCP host bridge (LaunchAgent, NOT a LaunchDaemon).
 
-  Why a LaunchAgent: mcp-fantastical drives Fantastical.app via AppleScript +
-  EventKit and needs macOS TCC (Full Calendar Access) granted in the logged-in
-  GUI session. A daemon (or a Docker container) has no GUI session and cannot
+  The stdio server is Flexibits' official FantasticalMCP helper, shipped inside
+  Fantastical.app, so it always matches the installed app version.
+
+  Why a LaunchAgent: the helper talks to the running Fantastical.app and needs
+  macOS TCC (calendar access) granted in the logged-in GUI session. A daemon (or a Docker container) has no GUI session and cannot
   satisfy that — so this MUST run as a per-user Agent in the Aqua session.
 
   This bridge wraps the stdio MCP as an SSE endpoint on :7013 so the Dockerized
@@ -35,7 +37,10 @@
              fatal one. Revisit if upstream merges PR #113 or #154. -->
         <string>supergateway@3.3.0</string>
         <string>--stdio</string>
-        <string>/opt/homebrew/bin/npx -y mcp-fantastical</string>
+        <!-- On start the helper logs "MCP host identity unresolved: pid N has no
+             valid code signature" because Homebrew node is unsigned. It is
+             info-level only; tool calls still work. -->
+        <string>/Applications/Fantastical.app/Contents/Helpers/FantasticalMCP.app/Contents/MacOS/FantasticalMCP</string>
         <string>--port</string>
         <string>7013</string>
         <string>--baseUrl</string>
@@ -44,9 +49,8 @@
         <string>/healthz</string>
         <string>--logLevel</string>
         <string>info</string>
-        <!-- 3.3.0's stdio child pool. minConcurrency 1 pre-warms one
-             `npx -y mcp-fantastical` at boot so the first gateway request does
-             not pay npx cold-start.
+        <!-- 3.3.0's stdio child pool. minConcurrency 1 pre-warms one helper
+             at boot; the first tool call on a fresh helper can be slow.
 
              maxConcurrency is 8, NOT the 2 that mcpx + agentgateway strictly
              need, and the headroom is load-bearing. 3.3.0 leaks a pool slot on
@@ -76,8 +80,8 @@
         <string>8</string>
     </array>
 
-    <!-- launchd starts with a near-empty PATH; supergateway must find npx (to
-         spawn the mcp-fantastical child) and node. Pin Homebrew's bin. -->
+    <!-- launchd starts with a near-empty PATH; npx must find node to run
+         supergateway. Pin Homebrew's bin. -->
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
@@ -100,7 +104,7 @@
          So KeepAlive does NOT cover child death, and /healthz is NOT a liveness
          signal — it returns ok even with no working child. Do not use
          `manage.sh test` / `manage.sh status` as proof this works; probe the MCP
-         protocol itself (initialize + tools/list, expect 6 tools).
+         protocol itself (initialize + tools/list, expect 5 tools).
 
          ThrottleInterval raises launchd's 10s default so that if this ever does
          re-enter a crash loop it burns 2 respawns/min instead of ~3.4/min. For
@@ -113,7 +117,7 @@
     <key>ThrottleInterval</key>
     <integer>30</integer>
 
-    <!-- mark as user-interactive: helps AppleScript / Apple Events + TCC. -->
+    <!-- mark as user-interactive: keeps the helper in the GUI session for TCC. -->
     <key>ProcessType</key>
     <string>Interactive</string>
 
