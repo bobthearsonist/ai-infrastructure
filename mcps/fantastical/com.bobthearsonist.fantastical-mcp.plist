@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Fantastical MCP host bridge (LaunchAgent, NOT a LaunchDaemon).
+
+  Why a LaunchAgent: mcp-fantastical drives Fantastical.app via AppleScript +
+  EventKit and needs macOS TCC (Full Calendar Access) granted in the logged-in
+  GUI session. A daemon (or a Docker container) has no GUI session and cannot
+  satisfy that — so this MUST run as a per-user Agent in the Aqua session.
+
+  This bridge wraps the stdio MCP as an SSE endpoint on :7013 so the Dockerized
+  gateways (agentgateway, mcpx) can reach it via host.docker.internal:7013.
+
+  Host-specific paths (HOME, /opt/homebrew, user) are baked in deliberately:
+  this service is inherently tied to this Mac. Install via ./manage.sh install.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.bobthearsonist.fantastical-mcp</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/npx</string>
+        <string>-y</string>
+        <!-- PINNED, deliberately, to 3.3.0 (2026-09-07). Do NOT float this back
+             to unpinned `supergateway` or to :latest (3.4.3). See the crash-loop
+             note below: 3.4.3's stdioToSse shares ONE MCP SDK Server across SSE
+             sessions, and @modelcontextprotocol/sdk >= 1.26.0 throws
+             "Already connected to a transport" on the second connect(). 3.3.0
+             (PR #52) is the only published release that allocates a Server AND a
+             pooled stdio child per session. The maintainer reverted it in 3.4.0
+             ("rollback concurrency updates temporarily"), so this pin is a
+             deliberate trade: a withdrawn-but-working release over a current-but-
+             fatal one. Revisit if upstream merges PR #113 or #154. -->
+        <string>supergateway@3.3.0</string>
+        <string>--stdio</string>
+        <string>/opt/homebrew/bin/npx -y mcp-fantastical</string>
+        <string>--port</string>
+        <string>7013</string>
+        <string>--baseUrl</string>
+        <string>http://host.docker.internal:7013</string>
+        <string>--healthEndpoint</string>
+        <string>/healthz</string>
+        <string>--logLevel</string>
+        <string>info</string>
+        <!-- 3.3.0's stdio child pool. minConcurrency 1 pre-warms one
+             `npx -y mcp-fantastical` at boot so the first gateway request does
+             not pay npx cold-start.
+
+             maxConcurrency is 8, NOT the 2 that mcpx + agentgateway strictly
+             need, and the headroom is load-bearing. 3.3.0 leaks a pool slot on
+             every ERROR-path disconnect: dist/gateways/stdioToSse.js calls
+             pool.release(child) from exactly ONE place, `req.on('close')`, while
+             sseTransport.onclose and .onerror only `delete sessions[sessionId]`
+             and never release. An aborted SSE stream (container restart, network
+             blip) therefore burns a child permanently.
+
+             Worse, once the pool is FULL the handler blocks at
+             `child = await pool.acquire()` on line 63 — which is BEFORE
+             `req.on('close')` is registered on line 113 — so a client that
+             gives up while queued can never release either. That makes
+             exhaustion a one-way ratchet into permanent deadlock that KeepAlive
+             cannot clear, because the process never exits. Observed exactly
+             that: 2 slots leaked over 12 days (2026-09-07 -> 09-19), after
+             which every SSE connection logged "New SSE connection" and hung
+             forever while /healthz still returned ok.
+
+             8 slots buys weeks rather than days. It is a MITIGATION, not a fix
+             — the real fix is releasing the child in onclose/onerror too.
+             `manage.sh test` now probes the MCP protocol so exhaustion is
+             detected instead of being masked by /healthz. -->
+        <string>--minConcurrency</string>
+        <string>1</string>
+        <string>--maxConcurrency</string>
+        <string>8</string>
+    </array>
+
+    <!-- launchd starts with a near-empty PATH; supergateway must find npx (to
+         spawn the mcp-fantastical child) and node. Pin Homebrew's bin. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/dislexicmofo</string>
+    </dict>
+
+    <!-- restart policy: equivalent of compose `restart: unless-stopped`.
+         To stop intentionally, use `manage.sh stop` (bootout).
+
+         CORRECTION (2026-09-07) — the previous comment here claimed
+         "supergateway exits when its stdio child dies, so plain KeepAlive
+         cleanly respawns the whole bridge". That is FALSE, and was verified
+         false in the published dist of BOTH 3.4.3 and 3.3.0:
+           - 3.3.0 dist/lib/stdioProcessPool.js `child.on('exit')` only logs and
+             drops the child from the pool. There is no process.exit.
+           - dist/gateways/stdioToSse.js registers --healthEndpoint as an
+             unconditional res.send('ok') in both versions.
+         So KeepAlive does NOT cover child death, and /healthz is NOT a liveness
+         signal — it returns ok even with no working child. Do not use
+         `manage.sh test` / `manage.sh status` as proof this works; probe the MCP
+         protocol itself (initialize + tools/list, expect 6 tools).
+
+         ThrottleInterval raises launchd's 10s default so that if this ever does
+         re-enter a crash loop it burns 2 respawns/min instead of ~3.4/min. For
+         scale: the unthrottled 3.4.3 loop logged 335,704 crashes and 421MB of
+         logs between 2026-07-01 and 2026-09-07. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- mark as user-interactive: helps AppleScript / Apple Events + TCC. -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <key>StandardOutPath</key>
+    <string>/Users/dislexicmofo/Library/Logs/fantastical-mcp.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dislexicmofo/Library/Logs/fantastical-mcp.err.log</string>
+</dict>
+</plist>
