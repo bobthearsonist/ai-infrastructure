@@ -9,7 +9,8 @@ The stdio server is **FantasticalMCP**, the helper Flexibits ships inside the ap
 `/Applications/Fantastical.app/Contents/Helpers/FantasticalMCP.app`. It is the same
 server the Fantastical Claude Desktop extension runs, and it updates with the app.
 
-Tools: `queryCalendars`, `queryCalendarItems`, `createCalendarItem`,
+Tools (Fantastical 4.2.4): `queryCalendars`, `queryCalendarSets`,
+`queryCalendarItems`, `findAvailableTimes`, `createCalendarItem`,
 `modifyCalendarItem`, `deleteCalendarItem`. They cover events and tasks, return ISO
 8601 dates and stable item IDs, and carry `readOnlyHint` / `destructiveHint`
 annotations.
@@ -126,6 +127,6 @@ After editing either gateway's config, restart that gateway's container.
 ## Calendar writes
 
 The helper exposes `createCalendarItem`, `modifyCalendarItem` and
-`deleteCalendarItem`, not just reads. Gate those three to `ask` at the client
-permission layer (see `permissions.yaml`) so calendar writes always prompt, even
-though reads auto-approve.
+`deleteCalendarItem`, not just reads. At the client permission layer (see
+`permissions.yaml`), reads and create auto-approve, since a wrong new item is
+cheap to fix, while modify and delete are gated to `ask`.

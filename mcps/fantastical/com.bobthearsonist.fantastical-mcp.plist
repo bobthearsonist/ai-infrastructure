@@ -104,7 +104,7 @@
          So KeepAlive does NOT cover child death, and /healthz is NOT a liveness
          signal — it returns ok even with no working child. Do not use
          `manage.sh test` / `manage.sh status` as proof this works; probe the MCP
-         protocol itself (initialize + tools/list, expect 5 tools).
+         protocol itself (initialize + tools/list, expect 7 tools as of Fantastical 4.2.4).
 
          ThrottleInterval raises launchd's 10s default so that if this ever does
          re-enter a crash loop it burns 2 respawns/min instead of ~3.4/min. For
