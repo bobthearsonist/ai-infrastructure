@@ -40,11 +40,10 @@ services:
       # page open in the host browser reuse its cached basic-auth credentials to
       # drive this browser. Listed explicitly because nginx forwards Host without
       # the port, so Selkies' same-origin fallback would not match.
-      # NEKO_TAILNET_ORIGIN (machine-specific, set in the gitignored .env next to
-      # this file) adds the tailnet-only Tailscale Serve front end for phone
-      # access, e.g. https://<machine>.<tailnet>.ts.net:8443 served by:
-      #   tailscale serve --bg --https=8443 http://127.0.0.1:8091
-      # Unset, the allowlist stays loopback-only and remote viewers get a 403.
+      # NEKO_TAILNET_ORIGIN (set in the gitignored .env next to this file) adds
+      # the tailnet viewer served by the tailscale-neko sidecar below:
+      # https://neko.<tailnet>.ts.net. Unset, the allowlist stays loopback-only
+      # and tailnet viewers get a 403 on the stream websocket.
       SELKIES_ALLOWED_ORIGINS: 'http://localhost:8091,http://127.0.0.1:8091${NEKO_TAILNET_ORIGIN:+,}${NEKO_TAILNET_ORIGIN:-}'
       # Appended after the wrapper's own flags, so this --user-data-dir wins.
       # Profile is off Chromium's default dir: Chromium >=136 ignores
@@ -61,6 +60,36 @@ services:
     ports:
       - '127.0.0.1:8091:3000'   # viewer  http://localhost:8091
       - '127.0.0.1:7016:7016'   # playwright-personal MCP (sidecar below)
+
+  # Own tailnet node "neko", so the viewer has one stable address
+  # (https://neko.<tailnet>.ts.net) independent of the host machine's name and
+  # without a non-standard port; password managers match it as a single site.
+  # Tailnet only (Serve, never Funnel). Reaches the viewer over this stack's
+  # private network; nothing new is published on the host.
+  tailscale-neko:
+    image: tailscale/tailscale:stable
+    container_name: tailscale_neko
+    hostname: neko
+    restart: unless-stopped
+    env_file: ./secrets/tailscale.env   # TS_AUTHKEY: one-time key, only used on first join
+    environment:
+      TS_HOSTNAME: neko
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: 'true'
+      TS_ACCEPT_DNS: 'false'
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_ENABLE_HEALTH_CHECK: 'true'
+      TS_LOCAL_ADDR_PORT: 127.0.0.1:9002
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+      - ./config/tailscale-serve.json:/config/serve.json:ro
+    depends_on: [chromium-personal]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O-', 'http://127.0.0.1:9002/healthz']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   mcp-playwright-personal:
     image: mcr.microsoft.com/playwright/mcp:latest

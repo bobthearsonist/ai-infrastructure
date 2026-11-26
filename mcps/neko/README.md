@@ -16,10 +16,13 @@ browser that a human signs in to, attached to later over CDP, is not flagged.
 | `docker-compose.yml` | `chromium-personal` (linuxserver/chromium, Selkies viewer) and the `mcp-playwright-personal` sidecar sharing its network namespace |
 | `config/policies.json` | Managed Chrome policy: Keeper force-installed, other extensions and downloads blocked |
 | `config/wrapped-chromium` | Replaces the image's launcher: Chromium sandbox on, stale profile locks cleared |
+| `config/tailscale-serve.json` | Serve config for the `tailscale-neko` sidecar: `https://neko.<tailnet>.ts.net` → the viewer |
 | `config/google-chrome.conf` | Unused here: the neko (WebRTC) image's launcher, kept for hosts with real host networking |
 | `secrets/chromium.env` | Gitignored. `CUSTOM_USER` / `PASSWORD` for the viewer's basic auth |
-| `.env` | Gitignored. `NEKO_TAILNET_ORIGIN`, the machine's tailnet viewer origin (optional) |
+| `secrets/tailscale.env` | Gitignored. `TS_AUTHKEY`, a one-time key used only when the `neko` node first joins |
+| `.env` | Gitignored. `NEKO_TAILNET_ORIGIN=https://neko.<tailnet>.ts.net` |
 | `data/chromium-config/` | Gitignored. Browser home and profile (`profile/`); holds live sessions |
+| `data/tailscale/` | Gitignored. The `neko` node's identity; delete it and the node must rejoin |
 
 ## Run
 
@@ -36,22 +39,32 @@ When bumping the image, diff `config/wrapped-chromium` against the image's
 
 ## Viewer access
 
-- On the Mac: `http://localhost:8091` (basic auth from `secrets/chromium.env`).
-- From a phone or other tailnet device, tailnet only (never Funnel):
+The canonical address, from the Mac and every other tailnet device, is
+`https://neko.<tailnet>.ts.net` (basic auth from `secrets/chromium.env`). It is
+the `tailscale-neko` sidecar's own tailnet node, so it does not change with the
+host machine, and a password manager can save the basic-auth login against that
+one URL. `http://localhost:8091` remains as a local break-glass path.
 
-  ```bash
-  tailscale serve --bg --https=8443 http://127.0.0.1:8091
-  echo 'NEKO_TAILNET_ORIGIN=https://<machine>.<tailnet>.ts.net:8443' > .env
-  docker compose up -d
-  ```
+First-time setup:
 
-  Remove with `tailscale serve --https=8443 off`. Without `NEKO_TAILNET_ORIGIN`
-  the viewer page loads but its stream websocket is refused (403).
+1. Tailscale admin console → Settings → Keys → generate an auth key
+   (one-off, not ephemeral).
+2. `echo 'TS_AUTHKEY=tskey-auth-...' > secrets/tailscale.env`
+3. `echo 'NEKO_TAILNET_ORIGIN=https://neko.<tailnet>.ts.net' > .env`
+4. `docker compose up -d`
+5. In the admin console, open the `neko` machine and disable key expiry so the
+   node does not drop off the tailnet after 180 days. The auth key can then be
+   deleted from `secrets/tailscale.env`; the node identity lives in
+   `data/tailscale/`.
+
+Without `NEKO_TAILNET_ORIGIN` the viewer page loads but its stream websocket is
+refused (403). Tailnet ACLs decide who reaches the node; give it no more access
+than the devices that should drive this browser.
 
 ## Security model
 
 - Nothing is published beyond `127.0.0.1`; the tailnet viewer goes through
-  Tailscale Serve. CDP (9222) is never published: only the sidecar, inside the
+  the `tailscale-neko` sidecar's Serve config (tailnet only, never Funnel). CDP (9222) is never published: only the sidecar, inside the
   browser's network namespace, reaches it.
 - `SELKIES_ALLOWED_ORIGINS` blocks cross-site WebSocket hijacking of the viewer.
   The image's default (`*`) would let any page in a browser holding the
