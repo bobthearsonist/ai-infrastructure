@@ -29,8 +29,11 @@ services:
       # namespace syscalls Docker's default seccomp profile blocks. Tested on
       # Docker Desktop: default seccomp + sandbox fails with "No usable sandbox".
       - seccomp:unconfined
-    env_file: ./secrets/chromium.env   # CUSTOM_USER / PASSWORD: viewer basic auth
+    env_file: ./secrets/chromium.env   # CUSTOM_USER: viewer basic-auth user
     environment:
+      # Viewer basic-auth password, read from a file at init (linuxserver FILE__
+      # prefix) so it never appears in `docker inspect` or `docker compose config`.
+      FILE__PASSWORD: /run/secrets/viewer_password
       PUID: '1000'
       PGID: '1000'
       TZ: America/New_York
@@ -57,6 +60,7 @@ services:
       - ./data/chromium-config:/config
       - ./config/policies.json:/etc/chromium/policies/managed/policies.json:ro
       - ./config/wrapped-chromium:/usr/bin/wrapped-chromium:ro
+      - ./secrets/viewer_password:/run/secrets/viewer_password:ro
     ports:
       - '127.0.0.1:8091:3000'   # viewer  http://localhost:8091
       - '127.0.0.1:7016:7016'   # playwright-personal MCP (sidecar below)
@@ -71,7 +75,12 @@ services:
     container_name: tailscale_neko
     hostname: neko
     restart: unless-stopped
-    env_file: ./secrets/tailscale.env   # TS_AUTHKEY: one-time key, only used on first join
+    # TS_AUTHKEY: one-time key, only needed for the first join; the node identity
+    # then lives in data/tailscale. Leave the file absent or the value empty
+    # afterwards so the key does not sit in the container's environment.
+    env_file:
+      - path: ./secrets/tailscale.env
+        required: false
     environment:
       TS_HOSTNAME: neko
       TS_STATE_DIR: /var/lib/tailscale

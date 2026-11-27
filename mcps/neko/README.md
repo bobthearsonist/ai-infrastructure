@@ -18,7 +18,8 @@ browser that a human signs in to, attached to later over CDP, is not flagged.
 | `config/wrapped-chromium` | Replaces the image's launcher: Chromium sandbox on, stale profile locks cleared |
 | `config/tailscale-serve.json` | Serve config for the `tailscale-neko` sidecar: `https://neko.<tailnet>.ts.net` → the viewer |
 | `config/google-chrome.conf` | Unused here: the neko (WebRTC) image's launcher, kept for hosts with real host networking |
-| `secrets/chromium.env` | Gitignored. `CUSTOM_USER` / `PASSWORD` for the viewer's basic auth |
+| `secrets/chromium.env` | Gitignored. `CUSTOM_USER` for the viewer's basic auth |
+| `secrets/viewer_password` | Gitignored, mode 600. The viewer's basic-auth password, mounted as a file (`FILE__PASSWORD`) so it stays out of `docker inspect` |
 | `secrets/tailscale.env` | Gitignored. `TS_AUTHKEY`, a one-time key used only when the `neko` node first joins |
 | `.env` | Gitignored. `NEKO_TAILNET_ORIGIN=https://neko.<tailnet>.ts.net` |
 | `data/chromium-config/` | Gitignored. Browser home and profile (`profile/`); holds live sessions |
