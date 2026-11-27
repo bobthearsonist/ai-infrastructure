@@ -11,6 +11,7 @@ import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from stat import S_ISREG
 
 import yaml
 from fastembed import TextEmbedding
@@ -26,6 +27,8 @@ from tqdm import tqdm
 
 from chunking import CodeChunker, is_generated, load_jina_tokenizer
 from filters import (
+    git_listing,
+    looks_minified,
     normalize_repo_filter,
     should_index_name,
     should_index_stat,
@@ -467,9 +470,26 @@ class EmbeddingPipeline:
 
 def walk_repo(repo_path: Path, cfg: dict):
     """Walk repo yielding (path, stat) for indexable files, respecting skip
-    patterns. The one stat taken here serves every later size/mtime check."""
+    patterns. The one stat taken here serves every later size/mtime check.
+
+    In a git work tree, files git ignores are dropped and ignored directories
+    are never descended into (the walk is not git-aware on its own, so
+    gitignored build output or app data would otherwise be indexed). The
+    skip/index rules still apply on top. Outside git, the plain walk runs."""
+    listing = None
+    oversized = 0
+    if cfg["respect_gitignore"]:
+        listing, how = git_listing(repo_path)
+        print(f"  {repo_path.name}: " + (
+            f"respecting .gitignore ({how})" if listing
+            else f"filesystem walk, .gitignore not applied ({how})"))
     for root, dirs, files in repo_path.walk():
         dirs[:] = [d for d in dirs if not should_skip_dir(d, cfg)]
+        if listing is not None:
+            rel_root = root.relative_to(repo_path).as_posix()
+            prefix = "" if rel_root == "." else rel_root + "/"
+            dirs[:] = [d for d in dirs if listing.has_dir(prefix + d)]
+            files = [f for f in files if listing.has_file(prefix + f)]
 
         for fname in sorted(files):
             fpath = root / fname
@@ -482,8 +502,12 @@ def walk_repo(repo_path: Path, cfg: dict):
             except OSError:  # broken symlink, or removed since the listing
                 continue
             if not should_index_stat(st, cfg):
+                oversized += S_ISREG(st.st_mode)
                 continue
             yield fpath, st
+    if oversized:
+        print(f"  {repo_path.name}: skipped {oversized} file(s) over "
+              f"max_file_bytes={cfg['max_file_bytes']}")
 
 
 def index_repo(
@@ -721,6 +745,13 @@ def index_repo(
             record_skipped(state_key, rel_str, h, fingerprint, prev)
             continue
 
+        # Minified bundles slip past the size cap and the .min.js rule (a
+        # vendored or extension bundle rarely carries that suffix).
+        if looks_minified(content, cfg):
+            stats["minified"] += 1
+            record_skipped(state_key, rel_str, h, fingerprint, prev)
+            continue
+
         language = detect_language(fpath)
         chunks = pipeline.chunker.chunk(content, language)
 
@@ -870,7 +901,8 @@ def main():
     # What is on disk, so unchanged state is never rewritten. None forces the
     # first write when --force has ignored the file.
     last_saved = None if args.force else prev_state
-    stats = {"skipped": 0, "indexed": 0, "unchanged": 0, "errors": 0, "chunks": 0}
+    stats = {"skipped": 0, "indexed": 0, "unchanged": 0, "errors": 0, "chunks": 0,
+             "minified": 0}
     current_keys = set()
 
     # Index repos from repos_base, smallest first.
@@ -979,7 +1011,7 @@ def main():
     print("--- Summary ---")
     print(f"Indexed:   {stats['indexed']} files ({stats['chunks']} chunks)")
     print(f"Unchanged: {stats['unchanged']} files")
-    print(f"Skipped:   {stats['skipped']} files")
+    print(f"Skipped:   {stats['skipped']} files ({stats['minified']} minified)")
     print(f"Errors:    {stats['errors']} files")
     print(f"Deleted:   {len(deleted)} files")
 

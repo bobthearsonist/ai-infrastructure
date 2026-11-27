@@ -7,10 +7,19 @@ reindex, so the two can never disagree. Imported by the long-running watcher,
 so it must stay stdlib-only (no embedding, Qdrant or chunking imports).
 """
 
-from pathlib import PurePath
+import os
+import subprocess
+from pathlib import Path, PurePath, PurePosixPath
 from stat import S_ISREG
 
 DEFAULT_MAX_FILE_BYTES = 1_000_000
+# A file whose mean line length exceeds this is minified/bundled JS or a
+# one-line data blob. Real source, prose and pretty-printed JSON average well
+# under 200; minified bundles average thousands. 0 disables the check.
+DEFAULT_MAX_AVG_LINE_CHARS = 1000
+# Below this size the mean is too noisy to judge (a short one-liner is fine).
+_MINIFIED_MIN_CHARS = 4096
+GIT_LS_TIMEOUT_SECONDS = 60
 
 _REPO_SET_KEYS = (
     "skip_dirs", "skip_files", "skip_extensions",
@@ -30,6 +39,9 @@ def normalize_repo_filter(cfg: dict) -> dict:
     keys become sets and max_file_bytes gets its default."""
     out: dict = {k: set(cfg.get(k) or []) for k in _REPO_SET_KEYS}
     out["max_file_bytes"] = cfg.get("max_file_bytes", DEFAULT_MAX_FILE_BYTES)
+    out["max_avg_line_chars"] = cfg.get(
+        "max_avg_line_chars", DEFAULT_MAX_AVG_LINE_CHARS)
+    out["respect_gitignore"] = cfg.get("respect_gitignore", True)
     return out
 
 
@@ -65,6 +77,77 @@ def should_index_stat(st, flt: dict) -> bool:
     blobs that explode into thousands of chunks, dominate embed time, and
     pollute a code-search index."""
     return S_ISREG(st.st_mode) and st.st_size <= flt["max_file_bytes"]
+
+
+def looks_minified(content: str, flt: dict) -> bool:
+    """True if content is minified/bundled: big, with very long mean lines.
+    Such files carry no searchable structure and explode into hundreds of
+    near-identical chunks."""
+    limit = flt.get("max_avg_line_chars", DEFAULT_MAX_AVG_LINE_CHARS)
+    if not limit or len(content) < _MINIFIED_MIN_CHARS:
+        return False
+    return len(content) / (content.count("\n") + 1) > limit
+
+
+# ── Git ignore rules ───────────────────────────────────────────
+
+class GitListing:
+    """The files git would show for a work tree: tracked plus untracked but
+    not ignored (.gitignore, .git/info/exclude, core.excludesFile). Answers
+    membership for paths relative to the listed root.
+
+    Nested repositories and submodules are separate repositories that git
+    reports as one opaque entry, so nothing under them is listed: a stray
+    clone or worktree inside a repo is not indexed as part of it. List such a
+    repo in `repos` to index it."""
+
+    def __init__(self, paths: list[str]):
+        self.files: set[str] = set()
+        self.dirs: set[str] = {""}
+        for p in paths:
+            if p.endswith("/"):  # untracked nested repository
+                continue
+            self.files.add(p)
+            parent = PurePosixPath(p).parent
+            while str(parent) not in self.dirs and str(parent) != ".":
+                self.dirs.add(str(parent))
+                parent = parent.parent
+
+    def has_dir(self, rel: str) -> bool:
+        """True if the walk should descend into this root-relative dir."""
+        return rel in self.dirs
+
+    def has_file(self, rel: str) -> bool:
+        """True if a root-relative file is tracked or untracked-not-ignored."""
+        return rel in self.files
+
+
+def git_listing(root: Path) -> tuple[GitListing | None, str]:
+    """List root with git so ignored files can be dropped, or (None, reason)
+    when root is not in a git work tree or git is unusable, in which case
+    callers fall back to a plain filesystem walk.
+
+    safe.directory=* because the repos are bind-mounted into the indexer
+    container under another owner; ls-files never writes, so a read-only
+    mount is fine."""
+    cmd = [
+        "git", "-c", "safe.directory=*", "-C", str(root),
+        "ls-files", "--cached", "--others", "--exclude-standard", "-z",
+    ]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=GIT_LS_TIMEOUT_SECONDS,
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
+        )
+    except FileNotFoundError:
+        return None, "git not installed"
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, f"git failed: {e}"
+    if proc.returncode != 0:
+        err = proc.stderr.decode(errors="replace").strip().splitlines()
+        return None, err[0] if err else f"git exited {proc.returncode}"
+    paths = [p for p in proc.stdout.decode(errors="surrogateescape").split("\0") if p]
+    return GitListing(paths), f"git ls-files: {len(paths)} paths"
 
 
 # ── Vault indexer ──────────────────────────────────────────────

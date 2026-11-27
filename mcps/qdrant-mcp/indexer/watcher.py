@@ -120,6 +120,8 @@ class FileFilter(NamedTuple):
     skip_dir: Callable[[str], bool]
     name_ok: Callable[[Path, str, str], bool]
     stat_ok: Callable[[os.stat_result], bool]
+    # Drop files git ignores, as the repo indexer does (filters.git_listing).
+    respect_gitignore: bool = False
 
 
 def _build_file_filter(
@@ -135,6 +137,7 @@ def _build_file_filter(
             lambda d: filters.should_skip_dir(d, flt),
             lambda root, dirpath, fn: filters.should_index_name(fn, flt),
             lambda st: filters.should_index_stat(st, flt),
+            flt["respect_gitignore"],
         )
     if filters.is_vault_config(indexer_cfg):
         vault_skip = set(indexer_cfg["skip_dirs"] or [])
@@ -337,6 +340,26 @@ class DebouncedTrigger:
                 self._timer.cancel()
 
 
+# Last git_listing outcome per root, so the mode is logged on change only
+# rather than on every poll.
+_git_modes: dict[Path, bool] = {}
+
+
+def _git_listing(root: Path) -> "filters.GitListing | None":
+    """filters.git_listing for one walk root, logging when a root switches
+    between git-filtered and plain-walk mode (and the first time it is seen)."""
+    if not root.is_dir():
+        return None
+    listing, how = filters.git_listing(root)
+    if _git_modes.get(root) != (listing is not None):
+        _git_modes[root] = listing is not None
+        if listing is not None:
+            log.info("%s: respecting .gitignore (%s)", root, how)
+        else:
+            log.info("%s: filesystem walk, .gitignore not applied (%s)", root, how)
+    return listing
+
+
 def take_snapshot(
     roots: list[Path], flt: FileFilter
 ) -> dict[str, tuple[float, int]]:
@@ -346,9 +369,15 @@ def take_snapshot(
     that doesn't exist yet contributes nothing until it appears."""
     snap: dict[str, tuple[float, int]] = {}
     for root in roots:
+        listing = _git_listing(root) if flt.respect_gitignore else None
         for dirpath, dirnames, filenames in os.walk(root):
             # Prune ignored dirs in place so os.walk never descends into them.
             dirnames[:] = [d for d in dirnames if not flt.skip_dir(d)]
+            if listing is not None:
+                rel = Path(dirpath).relative_to(root).as_posix()
+                prefix = "" if rel == "." else rel + "/"
+                dirnames[:] = [d for d in dirnames if listing.has_dir(prefix + d)]
+                filenames = [f for f in filenames if listing.has_file(prefix + f)]
             for fn in filenames:
                 # Name checks first: every stat is a round trip to the host
                 # filesystem on a Docker Desktop bind mount.
