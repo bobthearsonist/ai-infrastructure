@@ -26,8 +26,21 @@ services:
         aliases:
           - mcpx-stdio-proxy
       ai-shared:
+    # HA_TOKEN and friends come from stdio-proxy/.env as a mounted file rather
+    # than the included env_file:, so they stay out of `docker inspect`.
+    # mcp-proxy's --pass-environment still hands them to the stdio children.
+    # Overridden here, not in stdio-proxy/docker-compose.yml, because that
+    # file is also included by agentgateway. Setting entrypoint clears the
+    # image CMD, so the Dockerfile's CMD is restated.
+    env_file: !reset []
+    entrypoint: ["/env-file-entrypoint.sh", "mcp-proxy"]
+    command: ["--pass-environment", "--host", "0.0.0.0", "--port", "7030", "--named-server-config", "/config/servers.json", "--debug"]
+    environment:
+      - ENV_SECRETS_FILE=/run/secrets/stdio-proxy.env
     volumes:
       - ~/.local-pypi:/local-pypi:ro
+      - ./env-file-entrypoint.sh:/env-file-entrypoint.sh:ro
+      - ../stdio-proxy/.env:/run/secrets/stdio-proxy.env:ro
 
   # MCPX Gateway - MCP Proxy Server
   # https://docs.lunar.dev/mcpx/architecture
@@ -57,10 +70,14 @@ services:
       - "127.0.0.1:9001:9001" # Internal webserver port
       - "127.0.0.1:3100:3000" # Metrics port (remapped from 3000 - conflict with other service)
     # AUTH_KEY: the API key mcpx requires on MCP and REST routes when
-    # app.yaml sets auth.enabled. Clients send it as x-lunar-api-key.
-    env_file:
-      - ./secrets/mcpx-auth.env
+    # app.yaml sets auth.enabled. Clients send it as x-lunar-api-key. Loaded
+    # from the mounted file by env-file-entrypoint.sh, not env_file:, so it is
+    # absent from `docker inspect`. Setting entrypoint clears the image CMD,
+    # so both are the image's own, restated.
+    entrypoint: ["/env-file-entrypoint.sh", "/usr/local/bin/entrypoint.sh"]
+    command: ["/usr/local/bin/startup.sh"]
     environment:
+      - ENV_SECRETS_FILE=/run/secrets/mcpx-auth.env
       - NODE_EXTRA_CA_CERTS=${CUSTOM_CA_CERT:+/usr/local/share/ca-certificates/custom-ca.pem}
       # REST CORS and the /ws-ui socket.io origin. Unset, the websocket allows
       # "*". This only restrains browsers' long-polling; websocket upgrades
@@ -70,6 +87,8 @@ services:
       - ./:/lunar/packages/mcpx-server/config
       - ${MCP_CONFIG}:/lunar/packages/mcpx-server/config/mcp.json:ro
       - ${CUSTOM_CA_CERT:-/dev/null}:/usr/local/share/ca-certificates/custom-ca.pem:ro
+      - ./env-file-entrypoint.sh:/env-file-entrypoint.sh:ro
+      - ./secrets/mcpx-auth.env:/run/secrets/mcpx-auth.env:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # service_started, NOT service_healthy. stdio-proxy fronts npx-based MCPs
@@ -113,12 +132,14 @@ services:
       - "127.0.0.1:9222:9222" # Chrome DevTools Protocol proxy port
       # Kapture WebSocket (61822) is now served by the kapture-server container
       # in mcps/kapture/docker-compose.yml — do NOT publish it here.
-    # AUTH_KEY is rendered into nginx-templates/ at start. It is therefore
-    # visible in `docker inspect` (Config.Env), as it is for mcpx; keeping it
-    # out would need a custom entrypoint script, which this stock image avoids.
-    env_file:
-      - ./secrets/mcpx-auth.env
+    # AUTH_KEY is rendered into nginx-templates/ at start by the stock image's
+    # envsubst step. env-file-entrypoint.sh exports it from the mounted file
+    # first, keeping it out of `docker inspect`; the image's own entrypoint
+    # and CMD are restated because setting entrypoint clears the CMD.
+    entrypoint: ["/env-file-entrypoint.sh", "/docker-entrypoint.sh"]
+    command: ["nginx", "-g", "daemon off;"]
     environment:
+      - ENV_SECRETS_FILE=/run/secrets/mcpx-auth.env
       # Browser Origin allowed to use the gateway (and given the injected key).
       # Enable only while using the dashboard:
       #   MCPX_DASHBOARD_ORIGIN=http://127.0.0.1:15173 docker compose up -d nginx-ssl
@@ -133,6 +154,8 @@ services:
       - ./certs/tls/cert.pem:/etc/ssl/certs/cert.pem:ro
       - ./certs/tls/key.pem:/etc/ssl/private/key.pem:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro # Disable default config
+      - ./env-file-entrypoint.sh:/env-file-entrypoint.sh:ro
+      - ./secrets/mcpx-auth.env:/run/secrets/mcpx-auth.env:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
