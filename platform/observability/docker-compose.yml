@@ -69,8 +69,12 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    # Only seeds the admin password when grafana.db is first created; later
+    # changes go through `grafana cli admin reset-admin-password`.
+    secrets:
+      - grafana_admin_password
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
       - GF_USERS_ALLOW_SIGN_UP=false
     depends_on:
       - prometheus
@@ -86,3 +90,8 @@ networks:
 volumes:
   prometheus_data:
   grafana_data:
+
+# Files are gitignored; create with mode 600 before `docker compose up`.
+secrets:
+  grafana_admin_password:
+    file: ./secrets/grafana_admin_password
