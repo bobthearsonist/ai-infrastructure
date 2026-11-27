@@ -16,8 +16,11 @@ services:
     # browser and the client stay version-matched and no extra image is trusted.
     image: mcr.microsoft.com/playwright/mcp:latest
     container_name: playwright_chromium
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
+    # No watchtower label on either service. mcp_playwright joins this
+    # container's network namespace by container ID, so replacing this
+    # container on its own (as watchtower does) strands the MCP server on a
+    # namespace that no longer exists. Update the pair together instead:
+    # `docker compose pull && docker compose up -d` recreates both in order.
     restart: unless-stopped
     shm_size: 1gb
     # The browser directory name carries the Chromium revision and CPU
@@ -57,8 +60,6 @@ services:
   mcp_playwright:
     image: mcr.microsoft.com/playwright/mcp:latest
     container_name: mcp_playwright
-    labels:
-      - "com.centurylinklabs.watchtower.enable=true"
     restart: unless-stopped
     network_mode: 'service:chromium'
     depends_on:

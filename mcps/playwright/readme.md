@@ -26,6 +26,18 @@ instead of failing with "Browser is already in use". After a reconnect the
 server's current tab resets: agents should list tabs and select their own.
 The profile lives in the container and resets when the stack is recreated.
 
+## Updating
+
+Watchtower is deliberately not enabled for this stack. `mcp_playwright` shares
+the browser container's network namespace by container ID, so replacing the
+browser container alone leaves the MCP server attached to a namespace that no
+longer exists. Update both together, which also keeps the browser and the MCP
+client on the same Playwright build:
+
+```sh
+docker compose pull && docker compose up -d
+```
+
 ## Port
 
 | Port | Protocol | Description |
