@@ -1,33 +1,81 @@
 name: playwright
 
-version: '3.9'
+# Clean, signed-out browser for research and scraping (see playwright-personal in
+# mcps/neko for the logged-in one).
+#
+# The browser runs as its own long-lived service and the MCP server attaches to it
+# over CDP. If the MCP server launched the browser itself, the browser and its tabs
+# would belong to one MCP session: every gateway reconnect (mcpx holds one upstream
+# session and replaces it on any ping failure) would close the browser and lose
+# every agent's tabs, and a second session would fail with "Browser is already in
+# use". Attached over CDP, tabs live in the browser and survive reconnects.
 
 services:
+  chromium:
+    # Same image as the MCP server: it ships Playwright's Chromium build, so the
+    # browser and the client stay version-matched and no extra image is trusted.
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: playwright_chromium
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    restart: unless-stopped
+    shm_size: 1gb
+    # The browser directory name carries the Chromium revision and CPU
+    # architecture (chromium-1255/chrome-linux-arm64), so resolve it at start.
+    # --no-sandbox matches how the MCP image launched Chromium before; the
+    # container is the isolation boundary. CDP binds loopback only: the MCP
+    # sidecar shares this network namespace, nothing else can reach it.
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        exec $$(ls -d /ms-playwright/chromium-*/chrome-linux*/chrome | head -n1)
+        --headless=new
+        --no-sandbox
+        --no-first-run
+        --no-default-browser-check
+        --disable-dev-shm-usage
+        --user-data-dir=/home/node/profile
+        --remote-debugging-address=127.0.0.1
+        --remote-debugging-port=9222
+        about:blank
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "fetch(\"http://127.0.0.1:9222/json/version\").then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Published here because the MCP sidecar joins this service's network.
+    # Loopback only: this drives a real browser for whoever can reach it.
+    ports:
+      - '127.0.0.1:7007:7007' # localhost:7007/mcp
+    # Deliberately NOT on ai-shared. This container renders untrusted web
+    # pages; on ai-shared a hostile page could reach mcpx:9000/ws-ui (which
+    # mcpx does not authenticate) and every other MCP server directly. It stays
+    # on its own project network and is reached only via its loopback port.
+
   mcp_playwright:
     image: mcr.microsoft.com/playwright/mcp:latest
     container_name: mcp_playwright
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
-    # The image already sets the entrypoint to the CLI.
+    restart: unless-stopped
+    network_mode: 'service:chromium'
+    depends_on:
+      chromium:
+        condition: service_healthy
+    # The image's entrypoint is the CLI. --cdp-endpoint makes it attach to the
+    # browser above instead of launching its own.
     # --allowed-hosts is playwright-mcp's DNS-rebinding guard: it rejects any
     # Host header not listed. Gateways (mcpx, agentgateway) reach this through
     # host.docker.internal:7007, local tools through localhost. Both the bare
     # and :port forms are listed because the server checks the header both ways.
     command:
+      - '--cdp-endpoint=http://127.0.0.1:9222'
       - '--host=0.0.0.0'
       - '--port=7007'
       - '--allowed-hosts'
       - 'host.docker.internal,host.docker.internal:7007,localhost,localhost:7007,127.0.0.1,127.0.0.1:7007'
-    # Loopback only: this drives a real browser for whoever can reach it.
-    ports:
-      - '127.0.0.1:7007:7007' # localhost:7007/mcp
-    restart: unless-stopped
-    environment:
-      PLAYWRIGHT_DISABLE_GPU: '1' # optional; fine to remove
-    volumes:
-      - ./data/playwright-cache:/root/.cache/ms-playwright
-      # remove or adjust this if you don't need a custom profile dir:
-      - ./data/playwright-profile:/home/pw/profile
     # Healthcheck: TCP port check using node (curl/wget not available in official image).
     # The official Playwright MCP image intentionally has no /health endpoint to stay minimal.
     # See rejected PR: https://github.com/microsoft/playwright-mcp/pull/1054
@@ -37,7 +85,3 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    # Deliberately NOT on ai-shared. This container renders untrusted web
-    # pages; on ai-shared a hostile page could reach mcpx:9000/ws-ui (which
-    # mcpx does not authenticate) and every other MCP server directly. It stays
-    # on its own project network and is reached only via its loopback port.
