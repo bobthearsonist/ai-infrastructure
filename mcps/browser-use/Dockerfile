@@ -52,8 +52,9 @@ WORKDIR /app
 # Install Python dependencies
 RUN pip install --no-cache-dir uv
 
-# Install browser-use with MCP support
-RUN uv pip install --system "browser-use[cli]" mcp playwright
+# Install browser-use with MCP support. Pinned: browser-use 1.x replaced the
+# --mcp tool set, so upgrades need a deliberate client-side review.
+RUN uv pip install --system "browser-use[cli]==0.7.8" "mcp==1.14.1" "playwright==1.55.0"
 
 # Install playwright browsers
 RUN playwright install chromium --with-deps

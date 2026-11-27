@@ -18,7 +18,8 @@ fi
 
 # If running in MCP-only mode (for proxy), just run browser-use --mcp
 if [ "$1" = "browser-use" ] && [ "$2" = "--mcp" ]; then
-    echo "Running in MCP-only mode for proxy"
+    # stdout carries JSON-RPC; anything else there breaks the client.
+    echo "Running in MCP-only mode for proxy" >&2
     exec browser-use --mcp
 fi
 
