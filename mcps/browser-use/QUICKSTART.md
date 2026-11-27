@@ -112,7 +112,8 @@ browser-use/
 ├── Dockerfile                  # Container build instructions
 ├── manage.sh                   # Management script
 ├── .env.example               # Environment template
-├── .env                       # API keys and configuration
+├── .env                       # Non-secret settings
+├── secrets/                   # API key files (gitignored)
 ├── README.md                  # Architecture and integration notes
 ├── QUICKSTART.md              # This file
 └── data/                      # Container data storage
@@ -160,9 +161,8 @@ docker compose logs browser-use-mcp
 ### API Key Issues
 
 ```bash
-# Verify API keys are set
-grep OPENAI_API_KEY .env
-grep ANTHROPIC_API_KEY .env
+# Verify the API key files exist and are non-empty (prints sizes, not keys)
+wc -c secrets/*
 
 # Test API key works with uvx
 uvx browser-use[cli] --help

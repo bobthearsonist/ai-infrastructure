@@ -4,6 +4,18 @@
 export PYTHONUNBUFFERED=1
 export DISPLAY=${DISPLAY:-:99}
 
+# API keys arrive as files named after their env var (OPENAI_API_KEY, ...)
+# so they stay out of the container config that `docker inspect` shows.
+SECRETS_DIR=${SECRETS_DIR:-/run/secrets/browser-use}
+if [ -d "$SECRETS_DIR" ]; then
+    for f in "$SECRETS_DIR"/*; do
+        [ -f "$f" ] || continue
+        name=$(basename "$f")
+        [[ "$name" =~ ^[A-Z_][A-Z0-9_]*$ ]] || continue
+        export "$name=$(<"$f")"
+    done
+fi
+
 # If running in MCP-only mode (for proxy), just run browser-use --mcp
 if [ "$1" = "browser-use" ] && [ "$2" = "--mcp" ]; then
     echo "Running in MCP-only mode for proxy"
