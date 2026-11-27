@@ -1,0 +1,38 @@
+#!/bin/bash
+# stdio bridge from a stdio-only MCP client (Claude Desktop) to the mcpx gateway.
+# Claude Desktop's config only runs local commands; clients that speak HTTP
+# (Claude Code, Copilot CLI, Goose) connect to mcpx directly instead.
+#   usage: mcpx-bridge <consumer-tag>
+#
+# The API key must never reach argv (visible to every process via `ps`), so it is
+# handed to mcp-remote through --header-file. mcp-remote does not expand ${VAR}
+# in --header values, so an env placeholder is not an option.
+# mcpx-auth.env stays the single source of the key; the header file is regenerated
+# on every launch so a rotation needs no second edit.
+set -euo pipefail
+
+tag="${1:?usage: mcpx-bridge <consumer-tag>}"
+env_file="$HOME/Repositories/ai-infrastructure/mcps/mcpx/secrets/mcpx-auth.env"
+hdr_dir="$HOME/.config/mcpx"
+hdr_file="$hdr_dir/mcpx-auth.headers"
+
+source ~/.nvm/nvm.sh && nvm use 20.11.1 >/dev/null 2>&1
+
+# Not `set -a`: the key stays a shell variable and never enters npx's environment.
+AUTH_KEY="$(sed -n 's/^AUTH_KEY=//p' "$env_file" | tr -d '"'"'"'\r')"
+[ -n "$AUTH_KEY" ] || { echo "mcpx-bridge: AUTH_KEY missing from $env_file" >&2; exit 1; }
+
+umask 077
+mkdir -p "$hdr_dir"
+# printf is a builtin, so the key is not exposed as an argument. Write-then-rename
+# keeps a concurrently launching client from reading a half-written file.
+tmp="$(mktemp "$hdr_dir/.headers.XXXXXX")"
+printf 'x-lunar-api-key: %s\n' "$AUTH_KEY" >"$tmp"
+mv -f "$tmp" "$hdr_file"
+unset AUTH_KEY
+
+# Pinned: --header-file is recent, and an unpinned upgrade that changed it would
+# drop every tool silently. Bump deliberately.
+exec npx -y mcp-remote@0.17.1 http://127.0.0.1:9000/mcp \
+  --header "x-lunar-consumer-tag: $tag" \
+  --header-file "$hdr_file"
