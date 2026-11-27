@@ -9,6 +9,11 @@
 # ---- CPU target (default) ----
 FROM python:3.12-slim AS cpu
 
+# git: the repo indexer and watcher list files with `git ls-files` so
+# gitignored paths are never indexed (falls back to a plain walk without it).
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .
@@ -28,7 +33,7 @@ FROM nvidia/cuda:13.0.1-cudnn-runtime-ubuntu24.04 AS gpu
 
 # Install Python 3.12 (ships with Ubuntu 24.04)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 python3-pip python3.12-venv \
+    python3.12 python3-pip python3.12-venv git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -55,7 +60,7 @@ FROM ubuntu:24.04 AS intel
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common gpg-agent python3.12 python3-pip python3.12-venv \
+    software-properties-common gpg-agent python3.12 python3-pip python3.12-venv git \
     && add-apt-repository -y ppa:kobuk-team/intel-graphics \
     && apt-get update && apt-get install -y --no-install-recommends \
     libze-intel-gpu1 libze1 intel-opencl-icd \
