@@ -613,7 +613,10 @@ With it, each repo is listed with `git ls-files --cached --others
 --exclude-standard` and only those paths are walked; `skip_*`/`index_*` still
 apply on top. A repo that is not a git work tree, a worktree whose `.git`
 points outside the container, or an image without `git` falls back to the plain
-walk, and the run logs which mode each repo used. Nested repositories and
+walk, and the run logs which mode each repo used. If git fails on a repo that
+is a work tree (for example `ls-files` times out), the indexer skips that repo for
+the run and leaves its points alone, and the watcher keeps its last listing,
+rather than falling back to a walk that would index everything ignored. Nested repositories and
 submodules (a stray clone or worktree inside a repo) are skipped, as git does
 not list their contents; add them to `repos` to index them. The watcher applies the same listing to its poll walk.
 

@@ -122,10 +122,17 @@ class GitListing:
         return rel in self.files
 
 
+class GitListingError(Exception):
+    """root is a git work tree but listing it failed (timeout, damaged
+    index). Falling back to a plain walk here would index everything the
+    repo ignores, so callers skip the root instead."""
+
+
 def git_listing(root: Path) -> tuple[GitListing | None, str]:
     """List root with git so ignored files can be dropped, or (None, reason)
-    when root is not in a git work tree or git is unusable, in which case
-    callers fall back to a plain filesystem walk.
+    when root is not in a git work tree or git is not installed, in which
+    case callers fall back to a plain filesystem walk. Raises GitListingError
+    for any other failure.
 
     safe.directory=* because the repos are bind-mounted into the indexer
     container under another owner; ls-files never writes, so a read-only
@@ -142,10 +149,14 @@ def git_listing(root: Path) -> tuple[GitListing | None, str]:
     except FileNotFoundError:
         return None, "git not installed"
     except (OSError, subprocess.SubprocessError) as e:
-        return None, f"git failed: {e}"
+        raise GitListingError(f"git failed: {e}") from e
     if proc.returncode != 0:
-        err = proc.stderr.decode(errors="replace").strip().splitlines()
-        return None, err[0] if err else f"git exited {proc.returncode}"
+        stderr = proc.stderr.decode(errors="replace").strip()
+        reason = stderr.splitlines()[-1] if stderr else f"git exited {proc.returncode}"
+        # Also covers a worktree whose .git points outside the container.
+        if "not a git repository" in stderr:
+            return None, reason
+        raise GitListingError(reason)
     paths = [p for p in proc.stdout.decode(errors="surrogateescape").split("\0") if p]
     return GitListing(paths), f"git ls-files: {len(paths)} paths"
 
