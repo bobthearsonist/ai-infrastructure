@@ -27,6 +27,7 @@ from tqdm import tqdm
 
 from chunking import CodeChunker, is_generated, load_jina_tokenizer
 from filters import (
+    GitListingError,
     git_listing,
     looks_minified,
     normalize_repo_filter,
@@ -926,24 +927,32 @@ def main():
     # Missing repos are dropped here so they fall outside active_repos below and
     # keep their state, like repos that are not in the config.
     repos = [r for r in repos if (repos_base / r).exists()]
+    # Repos whose git listing failed; treated like missing repos so their
+    # state is kept and none of their points are deleted.
+    unlisted = set()
 
     for repo_name in repos:
         repo_path = repos_base / repo_name
 
         print(f"[{repo_name}]")
-        repo_files = index_repo(
-            repo_name,
-            repo_path,
-            cfg,
-            pipeline,
-            client,
-            prev_state,
-            new_state,
-            stats,
-            current_keys,
-            args.dry_run,
-            collection_name,
-        )
+        try:
+            repo_files = index_repo(
+                repo_name,
+                repo_path,
+                cfg,
+                pipeline,
+                client,
+                prev_state,
+                new_state,
+                stats,
+                current_keys,
+                args.dry_run,
+                collection_name,
+            )
+        except GitListingError as e:
+            print(f"  WARNING: git ls-files failed ({e}); skipping {repo_name} this run")
+            unlisted.add(repo_name)
+            continue
         if repo_files:
             print(f"  {repo_files} files indexed")
         else:
@@ -964,7 +973,7 @@ def main():
     # Clean up deleted files — only from repos in the current config.
     # Files from repos NOT in the config are preserved so that running
     # a subset of repos never deletes data from the others.
-    active_repos = set(repos)
+    active_repos = set(repos) - unlisted
     prev_active = {k for k in prev_state if k.split("::", 1)[0] in active_repos}
     deleted = prev_active - current_keys
 

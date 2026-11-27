@@ -343,6 +343,10 @@ class DebouncedTrigger:
 # Last git_listing outcome per root, so the mode is logged on change only
 # rather than on every poll.
 _git_modes: dict[Path, bool] = {}
+# Last successful listing per root. A failed listing reuses it: falling back
+# to a plain walk would add every ignored file to the snapshot and schedule
+# a spurious reindex, then another when git recovers.
+_last_listing: dict[Path, "filters.GitListing"] = {}
 
 
 def _git_listing(root: Path) -> "filters.GitListing | None":
@@ -350,7 +354,17 @@ def _git_listing(root: Path) -> "filters.GitListing | None":
     between git-filtered and plain-walk mode (and the first time it is seen)."""
     if not root.is_dir():
         return None
-    listing, how = filters.git_listing(root)
+    try:
+        listing, how = filters.git_listing(root)
+    except filters.GitListingError as e:
+        cached = _last_listing.get(root)
+        log.warning("%s: git ls-files failed (%s); %s", root, e,
+                    "reusing last listing" if cached else "plain walk this poll")
+        return cached
+    if listing is not None:
+        _last_listing[root] = listing
+    else:
+        _last_listing.pop(root, None)
     if _git_modes.get(root) != (listing is not None):
         _git_modes[root] = listing is not None
         if listing is not None:
