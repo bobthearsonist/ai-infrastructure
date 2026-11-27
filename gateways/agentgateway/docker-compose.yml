@@ -17,7 +17,22 @@ services:
   # The /local-pypi mount mirrors the standalone stdio-proxy override so
   # psmcp (photoshop) can find its package index — `include:` doesn't pull
   # override.yml in.
+  #
+  # Secrets: the included file loads mcps/stdio-proxy/.env via env_file, which
+  # puts HA_TOKEN in plain sight in `docker inspect`. This instance drops that
+  # env_file and mounts each value as a file under /run/secrets instead (see
+  # ./secrets/, gitignored, one file per variable, mode 600). The entrypoint
+  # wrapper exports those files as env vars and execs mcp-proxy, so hass-mcp
+  # still receives them through --pass-environment. Entrypoint and command are
+  # both set because overriding the entrypoint discards the image's CMD.
   stdio-proxy:
+    env_file: !reset []
+    secrets:
+      - HA_URL
+      - HA_TOKEN
+      - AUTO_APPROVE
+    entrypoint: ["/bin/sh", "/usr/local/bin/stdio-proxy-entrypoint.sh"]
+    command: ["--pass-environment", "--host", "0.0.0.0", "--port", "7030", "--named-server-config", "/config/servers.json", "--debug"]
     networks:
       default:
         aliases:
@@ -25,6 +40,7 @@ services:
       ai-shared:
     volumes:
       - ~/.local-pypi:/local-pypi:ro
+      - ./stdio-proxy-entrypoint.sh:/usr/local/bin/stdio-proxy-entrypoint.sh:ro
 
   # agentgateway - MCP Gateway/Proxy
   agentgateway:
@@ -84,6 +100,14 @@ services:
       - agentgateway
     networks:
       - default        # Can reach agentgateway on private network
+
+secrets:
+  HA_URL:
+    file: ./secrets/HA_URL
+  HA_TOKEN:
+    file: ./secrets/HA_TOKEN
+  AUTO_APPROVE:
+    file: ./secrets/AUTO_APPROVE
 
 networks:
   default:

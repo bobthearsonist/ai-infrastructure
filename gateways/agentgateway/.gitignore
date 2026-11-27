@@ -3,3 +3,6 @@ certs/
 *.pem
 *.key
 *.crt
+
+# File-mounted secrets for stdio-proxy (see docker-compose.yml)
+secrets/
