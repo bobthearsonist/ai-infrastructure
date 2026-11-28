@@ -11,6 +11,33 @@ Microsoft's official Playwright MCP server for browser automation capabilities u
 - LLM-friendly - no vision models needed, operates on structured data
 - Deterministic tool application - avoids ambiguity of screenshot-based approaches
 
+## Layout
+
+Two containers from the same image:
+
+| Service | Role |
+|---------|------|
+| `chromium` (`playwright_chromium`) | Long-lived headless Chromium, CDP on `127.0.0.1:9222` inside its network namespace only. Publishes port 7007. |
+| `mcp_playwright` | MCP server, `network_mode: service:chromium`, attaches with `--cdp-endpoint`. |
+
+Tabs belong to the browser, not to an MCP session, so they survive gateway
+reconnects and MCP server restarts, and concurrent sessions share one browser
+instead of failing with "Browser is already in use". After a reconnect the
+server's current tab resets: agents should list tabs and select their own.
+The profile lives in the container and resets when the stack is recreated.
+
+## Updating
+
+Watchtower is deliberately not enabled for this stack. `mcp_playwright` shares
+the browser container's network namespace by container ID, so replacing the
+browser container alone leaves the MCP server attached to a namespace that no
+longer exists. Update both together, which also keeps the browser and the MCP
+client on the same Playwright build:
+
+```sh
+docker compose pull && docker compose up -d
+```
+
 ## Port
 
 | Port | Protocol | Description |
