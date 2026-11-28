@@ -7,6 +7,11 @@ set -a; source ~/.config/playwright-mcp/token.env; set +a
 # Open the extension's connect page through LaunchServices instead of letting
 # Playwright read Chrome's profile folder, which macOS blocks for these processes.
 export PLAYWRIGHT_MCP_EXECUTABLE_PATH="$HOME/.local/bin/playwright-chrome-open"
+# Disable the per-client heartbeat. By default one ping unanswered within 5 s
+# closes that client's session; when it is the last client (mcpx), the shared
+# extension connection closes and every agent tab group in Chrome is released.
+# A client that really goes away closes its HTTP stream, so nothing leaks.
+export PLAYWRIGHT_MCP_PING_TIMEOUT_MS=0
 PORT="${PLAYWRIGHT_CHROME_PORT:-7017}"
 # --shared-browser-context: every MCP client (mcpx, scripts) shares one extension
 # connection and one tab group instead of opening a new one per session.

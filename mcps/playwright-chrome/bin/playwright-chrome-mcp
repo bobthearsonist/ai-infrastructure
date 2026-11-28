@@ -1,0 +1,15 @@
+#!/bin/bash
+# stdio Playwright MCP attached to the real Chrome profile via the Playwright MCP Bridge extension.
+# Token lives in ~/.config/playwright-mcp/token.env, never in claude_desktop_config.json.
+# Optional: set PLAYWRIGHT_MCP_PROFILE_DIR_NAME in token.env (e.g. "Profile 1", from
+# chrome://version -> Profile Path) to pin which Chrome profile gets the connect page.
+source ~/.nvm/nvm.sh && nvm use 20.11.1 >/dev/null 2>&1
+set -a; source ~/.config/playwright-mcp/token.env; set +a
+# Skip Playwright's read of Chrome's profile folder (blocked for Claude-launched
+# servers) and open the connect page through LaunchServices. See playwright-chrome-open.
+export PLAYWRIGHT_MCP_EXECUTABLE_PATH="$HOME/.local/bin/playwright-chrome-open"
+# Disable the per-client heartbeat: one ping unanswered within 5 s (a busy
+# Claude app) closes the session and releases this chat's tab group. End of
+# stdin already signals that the client is gone.
+export PLAYWRIGHT_MCP_PING_TIMEOUT_MS=0
+exec npx -y @playwright/mcp@latest --extension
