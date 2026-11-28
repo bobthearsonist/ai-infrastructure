@@ -1,0 +1,37 @@
+#!/bin/bash
+# Replaces the linuxserver/chromium image's /usr/bin/wrapped-chromium.
+# Changes from upstream (re-diff against the image's copy when bumping it):
+#  - --no-sandbox removed. This browser holds live sessions and renders
+#    untrusted pages, so renderer isolation matters more than Docker's seccomp
+#    filter; the sandbox needs seccomp:unconfined (see compose).
+#  - stale-lock cleanup also covers /config/profile (CHROME_CLI's
+#    --user-data-dir). Locks embed the container hostname, which changes on
+#    every recreate; a leftover lock stalls Chromium on a "profile in use" dialog
+#    and CDP never comes up.
+
+BIN=/usr/bin/chromium
+
+# Cleanup
+if ! pgrep chromium > /dev/null;then
+  rm -f $HOME/.config/chromium/Singleton* $HOME/profile/Singleton*
+fi
+
+# Wayland check
+if [ "${PIXELFLUX_WAYLAND,,}" == "true" ]; then
+  WAYLAND="--ozone-platform=wayland"
+fi
+
+# Pelorus accessibility
+if [ "${PELORUS,,}" == "true" ]; then
+  ACCESSIBILITY="--force-renderer-accessibility"
+fi
+
+${BIN} \
+  --password-store=basic \
+  --simulate-outdated-no-au='Tue, 31 Dec 2099 23:59:59 GMT' \
+  --start-maximized \
+  --test-type \
+  --user-data-dir \
+  ${WAYLAND} \
+  ${ACCESSIBILITY} \
+   "$@" > /dev/null 2>&1

@@ -1,0 +1,24 @@
+{
+  "AutofillAddressEnabled": false,
+  "AutofillCreditCardEnabled": false,
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "PasswordManagerEnabled": false,
+  "DefaultNotificationsSetting": 2,
+  "DefaultPopupsSetting": 1,
+  "DeveloperToolsAvailability": 1,
+  "RemoteDebuggingAllowed": true,
+  "IncognitoModeAvailability": 1,
+  "BrowserAddPersonEnabled": false,
+  "BrowserGuestModeEnabled": false,
+  "DownloadRestrictions": 3,
+  "AllowFileSelectionDialogs": false,
+  "PromptForDownloadLocation": false,
+  "CommandLineFlagSecurityWarningsEnabled": false,
+  "URLBlocklist": ["file://*", "chrome://policy"],
+  "ExtensionInstallForcelist": [
+    "bfogiafebfohielmmehodmfbbebbbpei;https://clients2.google.com/service/update2/crx"
+  ],
+  "ExtensionInstallAllowlist": ["bfogiafebfohielmmehodmfbbebbbpei"],
+  "ExtensionInstallBlocklist": ["*"]
+}

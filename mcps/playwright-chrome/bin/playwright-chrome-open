@@ -1,0 +1,13 @@
+#!/bin/bash
+# Used as PLAYWRIGHT_MCP_EXECUTABLE_PATH by playwright-chrome-mcp.
+#
+# Why this exists: Claude launches MCP servers through its `disclaimer` helper, so
+# each server is its own responsible process for macOS privacy checks and cannot
+# read ~/Library/Application Support/Google/Chrome ("Operation not permitted").
+#  - Setting PLAYWRIGHT_MCP_EXECUTABLE_PATH makes Playwright skip its scan of that
+#    folder for the extension (createExtensionBrowser in playwright-core).
+#  - Playwright then runs "<this script> [--profile-directory=X] [--open-in-background] <connect-url>".
+#    Spawning Chrome's binary directly would inherit the MCP server's restricted
+#    identity, so hand it to LaunchServices instead: Chrome starts (or forwards the
+#    URL to the running instance) as itself.
+exec /usr/bin/open -na "Google Chrome" --args "$@"

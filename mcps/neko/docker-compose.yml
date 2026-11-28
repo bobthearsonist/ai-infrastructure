@@ -1,0 +1,120 @@
+name: neko
+
+# Logged-in "personal" browser: Chromium you sign into by hand through a web
+# viewer, then drive from agents via Playwright MCP over CDP.
+# Why: Google refuses sign-in in Playwright-launched Chromium; a normally launched
+# browser signed in by a human, attached to later over CDP, is not flagged.
+#
+# Viewer: linuxserver/chromium (Selkies). The screen streams over a websocket on
+# the HTTP port, so nothing depends on WebRTC media ports. The neko image
+# (config/google-chrome.conf) never got WebRTC through Docker Desktop's macOS
+# port forwarder; it remains an option on hosts with real host networking.
+#
+# Security model (see mcpx readme "Security"):
+#  - Deliberately NOT on ai-shared. This browser holds live sessions and renders
+#    untrusted pages.
+#  - Everything published on 127.0.0.1 only. CDP (9222) is never published: the
+#    playwright sidecar shares the browser's network namespace and reaches it on
+#    loopback.
+#  - Anything that can reach 127.0.0.1:7016 can act as you on every signed-in site.
+
+services:
+  chromium-personal:
+    image: lscr.io/linuxserver/chromium:latest
+    container_name: chromium_personal
+    restart: unless-stopped
+    shm_size: 2gb
+    security_opt:
+      # Chromium's own sandbox (enabled via config/wrapped-chromium) needs
+      # namespace syscalls Docker's default seccomp profile blocks. Tested on
+      # Docker Desktop: default seccomp + sandbox fails with "No usable sandbox".
+      - seccomp:unconfined
+    env_file: ./secrets/chromium.env   # CUSTOM_USER: viewer basic-auth user
+    environment:
+      # Viewer basic-auth password, read from a file at init (linuxserver FILE__
+      # prefix) so it never appears in `docker inspect` or `docker compose config`.
+      FILE__PASSWORD: /run/secrets/viewer_password
+      PUID: '1000'
+      PGID: '1000'
+      TZ: America/New_York
+      # No terminal, sudo, file transfer or app launcher in the viewer desktop.
+      HARDEN_DESKTOP: 'true'
+      # Cross-site WebSocket-hijacking guard. The image ships '*', which lets any
+      # page open in the host browser reuse its cached basic-auth credentials to
+      # drive this browser. Listed explicitly because nginx forwards Host without
+      # the port, so Selkies' same-origin fallback would not match.
+      # NEKO_TAILNET_ORIGIN (set in the gitignored .env next to this file) adds
+      # the tailnet viewer served by the tailscale-neko sidecar below:
+      # https://neko.<tailnet>.ts.net. Unset, the allowlist stays loopback-only
+      # and tailnet viewers get a 403 on the stream websocket.
+      SELKIES_ALLOWED_ORIGINS: 'http://localhost:8091,http://127.0.0.1:8091${NEKO_TAILNET_ORIGIN:+,}${NEKO_TAILNET_ORIGIN:-}'
+      # Appended after the wrapper's own flags, so this --user-data-dir wins.
+      # Profile is off Chromium's default dir: Chromium >=136 ignores
+      # --remote-debugging-port on the default profile. CDP binds loopback only.
+      CHROME_CLI: >-
+        --user-data-dir=/config/profile
+        --remote-debugging-port=9222
+        --no-first-run
+        --no-default-browser-check
+    volumes:
+      - ./data/chromium-config:/config
+      - ./config/policies.json:/etc/chromium/policies/managed/policies.json:ro
+      - ./config/wrapped-chromium:/usr/bin/wrapped-chromium:ro
+      - ./secrets/viewer_password:/run/secrets/viewer_password:ro
+    ports:
+      - '127.0.0.1:8091:3000'   # viewer  http://localhost:8091
+      - '127.0.0.1:7016:7016'   # playwright-personal MCP (sidecar below)
+
+  # Own tailnet node "neko", so the viewer has one stable address
+  # (https://neko.<tailnet>.ts.net) independent of the host machine's name and
+  # without a non-standard port; password managers match it as a single site.
+  # Tailnet only (Serve, never Funnel). Reaches the viewer over this stack's
+  # private network; nothing new is published on the host.
+  tailscale-neko:
+    image: tailscale/tailscale:stable
+    container_name: tailscale_neko
+    hostname: neko
+    restart: unless-stopped
+    # TS_AUTHKEY: one-time key, only needed for the first join; the node identity
+    # then lives in data/tailscale. Leave the file absent or the value empty
+    # afterwards so the key does not sit in the container's environment.
+    env_file:
+      - path: ./secrets/tailscale.env
+        required: false
+    environment:
+      TS_HOSTNAME: neko
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: 'true'
+      TS_ACCEPT_DNS: 'false'
+      TS_SERVE_CONFIG: /config/serve.json
+      TS_ENABLE_HEALTH_CHECK: 'true'
+      TS_LOCAL_ADDR_PORT: 127.0.0.1:9002
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+      - ./config/tailscale-serve.json:/config/serve.json:ro
+    depends_on: [chromium-personal]
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O-', 'http://127.0.0.1:9002/healthz']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  mcp-playwright-personal:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: mcp_playwright_personal
+    restart: unless-stopped
+    network_mode: 'service:chromium-personal'
+    depends_on: [chromium-personal]
+    command:
+      - '--cdp-endpoint=http://127.0.0.1:9222'
+      - '--host=0.0.0.0'
+      - '--port=7016'
+      - '--allowed-hosts'
+      - 'host.docker.internal,host.docker.internal:7016,localhost,localhost:7016,127.0.0.1,127.0.0.1:7016'
+    healthcheck:
+      test: ['CMD-SHELL', 'node -e "const net = require(\"net\"); const s = net.connect(7016, () => { s.end(); process.exit(0); }); s.on(\"error\", () => process.exit(1));"']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
