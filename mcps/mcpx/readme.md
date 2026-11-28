@@ -159,7 +159,7 @@ docker compose up -d nginx-ssl                                               # o
 
 While it is on, any caller that can reach nginx, including a container via `host.docker.internal`, can forge that Origin and get the key.
 
-**The key.** It lives in `secrets/mcpx-auth.env` (gitignored), with Keeper's `homelab` folder as the source of truth ("mcpx gateway API key"). It reaches nginx through `nginx-templates/`, which the stock image renders at start. It is visible in `docker inspect` for `mcpx` and `mcpx-ssl-proxy`. If `AUTH_KEY` or `MCPX_DASHBOARD_ORIGIN` is empty, nginx refuses to start rather than letting everything through. Consumer tags (`x-lunar-consumer-tag`) are client-supplied labels: any key holder can claim any consumer.
+**The key.** It lives in `secrets/mcpx-auth.env` (gitignored), with Keeper's `homelab` folder as the source of truth ("mcpx gateway API key"). It reaches nginx through `nginx-templates/`, which the stock image renders at start. The file is mounted at `/run/secrets/mcpx-auth.env` and loaded by `env-file-entrypoint.sh`, which exports its lines and then execs the image's own entrypoint, so the key is not in `docker inspect` or `docker compose config`. The stdio-proxy in this stack loads `../stdio-proxy/.env` (`HA_TOKEN` and the like) the same way. The wrapper exits if the file is missing or unreadable. If `AUTH_KEY` or `MCPX_DASHBOARD_ORIGIN` is empty, nginx refuses to start rather than letting everything through. Consumer tags (`x-lunar-consumer-tag`) are client-supplied labels: any key holder can claim any consumer.
 
 ## HTTPS (optional)
 
