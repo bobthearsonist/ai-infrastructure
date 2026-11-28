@@ -602,6 +602,23 @@ All repo indexer settings live in `indexer/repos*.yaml` — no code changes need
 | `index_extensions` | Text file extensions to index |
 | `index_filenames` | Specific filenames to always index (e.g., `Dockerfile`, `CLAUDE.md`) |
 | `max_chunk_chars` | Maximum chunk size in characters (default: 1200) |
+| `respect_gitignore` | Drop files git ignores in repos that are git work trees (default: `true`) |
+| `max_file_bytes` | Skip files larger than this; one summary line per repo counts them (default: 1000000) |
+| `max_avg_line_chars` | Skip files over 4 KB whose mean line length exceeds this — minified bundles, one-line data blobs (default: 1000; `0` disables) |
+
+The walk is a filesystem walk, so without `respect_gitignore` it would index
+gitignored build output and app data sitting inside a repo (a signed-in
+browser profile under a gitignored `data/` once made up most of a collection).
+With it, each repo is listed with `git ls-files --cached --others
+--exclude-standard` and only those paths are walked; `skip_*`/`index_*` still
+apply on top. A repo that is not a git work tree, a worktree whose `.git`
+points outside the container, or an image without `git` falls back to the plain
+walk, and the run logs which mode each repo used. If git fails on a repo that
+is a work tree (for example `ls-files` times out), the indexer skips that repo for
+the run and leaves its points alone, and the watcher keeps its last listing,
+rather than falling back to a walk that would index everything ignored. Nested repositories and
+submodules (a stray clone or worktree inside a repo) are skipped, as git does
+not list their contents; add them to `repos` to index them. The watcher applies the same listing to its poll walk.
 
 ### Chunking Strategy
 
@@ -638,7 +655,8 @@ python index_repos.py --dry-run
 ### How It Works
 
 1. Loads configuration from the `--config` yaml (`repos-work.yaml` / `repos-public.yaml`)
-2. Walks each repository, respecting skip patterns
+2. Walks each repository, respecting `.gitignore` (when it is a git work tree), skip
+   patterns, the file-size cap and the minified-file check
 3. Skips unchanged files — state is per scope: `.index_repos_state_work.json` /
    `.index_repos_state_public.json` in `INDEXER_STATE_DIR` (the `indexer-state` volume).
    Each entry holds the file's MD5 plus the mtime/size seen when it was hashed; a

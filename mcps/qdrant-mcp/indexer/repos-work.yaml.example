@@ -198,3 +198,10 @@ index_filenames:
   - global.json
 
 max_chunk_chars: 1200
+
+# File selection guards (defaults shown). respect_gitignore drops files git
+# ignores (needs git in the image; non-git dirs fall back to a plain walk).
+# max_avg_line_chars skips minified bundles; 0 disables it.
+# respect_gitignore: true
+# max_file_bytes: 1000000
+# max_avg_line_chars: 1000

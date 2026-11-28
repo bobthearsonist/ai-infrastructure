@@ -66,6 +66,19 @@ services:
       # "*". This only restrains browsers' long-polling; websocket upgrades
       # skip CORS, which is why nginx-ssl does the real Origin check.
       - CORS_ORIGINS=http://127.0.0.1:15173
+      # host.docker.internal resolves to an IPv4 and an unroutable IPv6 address.
+      # Node's happy-eyeballs gives the IPv4 attempt only 250ms (measured on
+      # the event loop), so a busy loop or a brief Docker VM stall abandons a
+      # working connect, fails over to IPv6 (ENETUNREACH) and every
+      # host-routed upstream drops at once. Reconnects reset Playwright tabs.
+      # Disabling it uses the first address with the normal connect timeout;
+      # ipv4first makes that address the IPv4 one regardless of resolver order.
+      # unhandled-rejections=warn: mcpx does not catch every upstream send
+      # failure (e.g. "fetch failed: other side closed" when an upstream drops
+      # a socket mid-request), and Node's default turns that into a process
+      # exit that drops every client and upstream session. Warn keeps the
+      # gateway up; the failing upstream is reconnected by its watchdog.
+      - NODE_OPTIONS=--no-network-family-autoselection --dns-result-order=ipv4first --unhandled-rejections=warn
     volumes:
       - ./:/lunar/packages/mcpx-server/config
       - ${MCP_CONFIG}:/lunar/packages/mcpx-server/config/mcp.json:ro

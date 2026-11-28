@@ -68,6 +68,58 @@ Use `127.0.0.1`, not `localhost`: on Windows with WSL, `localhost` resolves to `
 
 Remote HTTPS MCP servers (e.g. a local Profisee instance's `https://<host>/<instance>/mcp/` endpoint, authenticated with an `x-api-key` header) use the same `type: http` shape. Claude Code validates TLS against the Windows certificate store as well as its bundled CAs (`CLAUDE_CODE_CERT_STORE` defaults to `bundled,system`), so a self-signed IIS certificate that Windows trusts needs no `NODE_TLS_REJECT_UNAUTHORIZED=0`.
 
+#### Goose (native HTTP)
+
+Goose's `streamable_http` extension type sends custom headers and expands `${VAR}` in header values from `env_keys`, resolved from the environment first and then Goose's keychain secret store. Entry in `~/.config/goose/config.yaml`:
+
+```yaml
+mcpx:
+  enabled: true
+  type: streamable_http
+  name: mcpx
+  uri: http://127.0.0.1:9000/mcp
+  headers:
+    x-lunar-consumer-tag: goose
+    x-lunar-api-key: ${MCPX_API_KEY}
+  envs: {}
+  env_keys:
+  - MCPX_API_KEY
+  timeout: 600
+```
+
+Store the key once in Goose Desktop (Extensions > mcpx > Edit, environment variable `MCPX_API_KEY`) or through `goose configure`. Goose 1.61 has no non-interactive `set-secret` command. Apps launched from the Dock do not see shell environment variables, so the keychain entry is what Goose Desktop uses.
+
+Quit Goose Desktop before editing `config.yaml` by hand: it writes its in-memory extension list back on save and overwrites hand edits.
+
+#### Claude Desktop (stdio bridge)
+
+`claude_desktop_config.json` only starts local commands; it skips any entry with a URL and no command, and remote Connectors run from Anthropic's servers, which cannot reach `127.0.0.1`. Claude Desktop therefore reaches mcpx through [`claude-desktop/mcpx-bridge`](claude-desktop/mcpx-bridge), which runs a pinned `mcp-remote` with the key in a header file:
+
+```bash
+ln -s ~/Repositories/ai-infrastructure/clients/claude-desktop/mcpx-bridge ~/.local/bin/mcpx-bridge
+```
+
+```json
+"mcpx": {
+  "command": "/Users/<you>/.local/bin/mcpx-bridge",
+  "args": ["claude-desktop"]
+}
+```
+
+The bridge reads `AUTH_KEY` from `mcps/mcpx/secrets/mcpx-auth.env`, writes it to `~/.config/mcpx/mcpx-auth.headers` (mode 0600) and passes that file with `--header-file`. Never pass the key with `--header`: process arguments are readable by every local user through `ps`, and `mcp-remote` does not expand `${VAR}` in `--header` values.
+
+`mcp-remote` gives up after two reconnect attempts, so after an mcpx restart Claude Desktop has no mcpx tools until it is quit and reopened.
+
+#### Rotating the mcpx key
+
+The key has copies in `mcps/mcpx/secrets/mcpx-auth.env` (read by mcpx, nginx and the bridge), `~/.claude.json`, `~/.copilot/mcp-config.json`, Goose's keychain entry and Keeper. After changing the env file, recreate the containers; `docker compose restart` keeps the old `env_file` values:
+
+```bash
+docker compose -f mcps/mcpx/docker-compose.yml up -d --force-recreate --no-deps mcpx nginx-ssl
+```
+
+Then reconnect every client (`/mcp` in Claude Code, a full quit and reopen of Claude Desktop).
+
 ### 2. Direct SSE (per-MCP)
 
 Clients connect directly to individual MCP SSE endpoints. Used for MCPs that expose their own SSE server (e.g., qdrant-mcp on `:7020`).
