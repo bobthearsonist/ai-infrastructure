@@ -83,6 +83,9 @@ services:
       # "*". This only restrains browsers' long-polling; websocket upgrades
       # skip CORS, which is why nginx-ssl does the real Origin check.
       - CORS_ORIGINS=http://127.0.0.1:15173
+      # The image defaults to LUNAR_TELEMETRY=true, which ships gateway logs to
+      # Lunar's hosted collector (LOKI_HOST=log-collector.lunar.dev).
+      - LUNAR_TELEMETRY=false
       # host.docker.internal resolves to an IPv4 and an unroutable IPv6 address.
       # Node's happy-eyeballs gives the IPv4 attempt only 250ms (measured on
       # the event loop), so a busy loop or a brief Docker VM stall abandons a
