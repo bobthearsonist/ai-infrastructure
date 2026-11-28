@@ -33,16 +33,28 @@ This is a containerized setup for the browser-use MCP server that enables AI-dri
 
 ## Setup
 
-### 1. Environment Variables
+### 1. API keys and settings
 
-Create a `.env` file with your API keys:
+API keys are files in the gitignored `secrets/` directory, one per key,
+named after the env var. They are never set as container environment
+variables, so `docker inspect` does not show them:
 
 ```bash
-# Required: Choose one or both
-OPENAI_API_KEY=sk-your-openai-key-here
-ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here
+mkdir -m 700 secrets
+# Required: one or both. Write the key without echoing it to the terminal.
+(umask 077; pbpaste > secrets/OPENAI_API_KEY)
+(umask 077; pbpaste > secrets/ANTHROPIC_API_KEY)
+```
 
-# Optional: Browser settings
+`docker-run-with-secrets` (in the proxy image) mounts `secrets/` read-only
+into each `browser-use-mcp` container at `/run/secrets/browser-use`, and
+`entrypoint.sh` exports each file as its env var inside the process only.
+
+Non-secret settings go in `.env`, which compose reads for interpolation only
+(it is not an `env_file`, so nothing in it reaches the container unless the
+compose file names it):
+
+```bash
 BROWSER_USE_HEADLESS=true
 BROWSER_USE_LOGGING_LEVEL=WARNING
 ```
@@ -143,14 +155,14 @@ docker-compose up -d
 
 ### MCP Connection Issues
 
-- Verify API keys are set correctly in `.env`
+- Verify the API key files exist in `secrets/` and are non-empty
 - Check network connectivity between containers
 - Ensure health endpoint responds: `curl http://localhost:7009/health`
 - Test MCP endpoint: `curl http://localhost:7009/mcp`
 
 ## Security Notes
 
-- API keys are passed through environment variables only
+- API keys are mounted as read-only files, never set as container environment variables
 - Browser runs in a sandboxed container environment
 - No persistent browser data stored by default
 - Network isolated through Docker networks

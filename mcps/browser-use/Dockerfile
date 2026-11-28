@@ -52,8 +52,11 @@ WORKDIR /app
 # Install Python dependencies
 RUN pip install --no-cache-dir uv
 
-# Install browser-use with MCP support
-RUN uv pip install --system "browser-use[cli]" mcp playwright
+# Install browser-use with MCP support. constraints.txt pins the whole tree:
+# browser-use 1.x replaced the --mcp tool set, and newer transitive deps
+# (pydantic) break 0.7.8, so upgrades need a deliberate review.
+COPY constraints.txt /tmp/constraints.txt
+RUN uv pip install --system -c /tmp/constraints.txt "browser-use[cli]" mcp playwright
 
 # Install playwright browsers
 RUN playwright install chromium --with-deps

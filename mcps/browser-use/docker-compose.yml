@@ -14,18 +14,13 @@ services:
         '0.0.0.0',
         '--pass-environment',
         '--',
-        'docker',
-        'run',
+        'docker-run-with-secrets',
         '-i',
         '--rm',
         '--network=browser-use_default',
         '--name=browser-use-mcp',
         '--label=com.docker.compose.project=browser-use',
         '--label=com.docker.compose.service=browser-use-mcp',
-        '-e',
-        'OPENAI_API_KEY',
-        '-e',
-        'ANTHROPIC_API_KEY',
         '-e',
         'BROWSER_USE_HEADLESS',
         '-e',
@@ -45,10 +40,18 @@ services:
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    env_file:
-      - .env
+      # One file per API key, named after its env var (OPENAI_API_KEY, ...).
+      # docker-run-with-secrets mounts it into each browser-use-mcp container,
+      # whose entrypoint exports the files, so no key is in either container's
+      # config. No env_file: .env would put every key back into this one.
+      - ./secrets:/run/secrets/browser-use:ro
     environment:
       - PYTHONUNBUFFERED=1
+      # Forwarded to browser-use-mcp by --pass-environment and -e above.
+      - BROWSER_USE_HEADLESS=${BROWSER_USE_HEADLESS:-true}
+      - BROWSER_USE_LOGGING_LEVEL=${BROWSER_USE_LOGGING_LEVEL:-WARNING}
+      - BROWSER_USE_SETUP_LOGGING=${BROWSER_USE_SETUP_LOGGING:-false}
+      - MCP_PORT=${MCP_PORT:-7009}
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:7011/status || exit 1']
       interval: 15s

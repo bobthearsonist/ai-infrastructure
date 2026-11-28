@@ -9,4 +9,6 @@ RUN python3 -m ensurepip && pip install --no-cache-dir uv
 
 ENV UV_PYTHON_PREFERENCE=only-system
 
+COPY --chmod=755 docker-run-with-secrets.sh /usr/local/bin/docker-run-with-secrets
+
 ENTRYPOINT ["mcp-proxy"]
