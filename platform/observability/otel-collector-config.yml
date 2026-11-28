@@ -16,8 +16,11 @@ exporters:
     endpoint: 0.0.0.0:8889
     namespace: otel
     send_timestamps: true
-    resource_to_telemetry_conversion:
-      enabled: true
+    # Promote every resource attribute (service.version, host.name,
+    # telemetry.sdk.*) to a metric label. Replaces the deprecated
+    # resource_to_telemetry_conversion, which collector 0.166 disables.
+    resource_constant_labels:
+      included: ["*"]
 
 connectors:
   spanmetrics:
