@@ -12,6 +12,14 @@ services:
       - "127.0.0.1:4317:4317"   # OTLP gRPC (receives traces from agentgateway)
       - "127.0.0.1:4318:4318"   # OTLP HTTP
       - "127.0.0.1:8889:8889"   # Prometheus metrics endpoint
+    # Collector 0.166 disables the prometheus exporter's
+    # resource_to_telemetry_conversion behind a feature gate; switching the gate
+    # off keeps resource attributes as metric labels until the config moves to
+    # resource_constant_labels. Overriding command replaces the image CMD, so
+    # --config is restated.
+    command:
+      - --config=/etc/otelcol-contrib/config.yaml
+      - --feature-gates=-exporter.prometheus.DisableResourceToTelemetryConversion
     volumes:
       - ./otel-collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
     networks:
