@@ -5,8 +5,9 @@
 # =============================================================================
 # NOTE: Vault path is NOT configured here
 # =============================================================================
-# The vault_path is read from ~/ai/local.yaml (obsidian.vault_path) and passed
-# via the VAULT_PATH environment variable. Use run.sh to run the indexer.
+# The vault is read from ~/ai/local.yaml (obsidian.vault_path root +
+# obsidian.default_vault) and passed via the VAULT_PATH environment variable.
+# Use run.sh to run the indexer.
 
 # =============================================================================
 # REQUIRED: Qdrant server URL

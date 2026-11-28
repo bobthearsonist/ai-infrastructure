@@ -10,7 +10,14 @@ shift
 
 # Read paths from local config (yq needs Windows path conversion, before MSYS_NO_PATHCONV)
 case "$INDEXER" in
-    obsidian) export VAULT_PATH=$(yq '.obsidian.vault_path' ~/ai/local.yaml) ;;
+    obsidian)
+        # vault_path is the root of every vault; index the default vault
+        # (vault_path/default_vault). Legacy configs without default_vault
+        # use vault_path as the vault. Same rule as obsidian-notes/vault.sh.
+        _root=$(yq '.obsidian.vault_path // ""' ~/ai/local.yaml)
+        _vault=$(yq '.obsidian.default_vault // ""' ~/ai/local.yaml)
+        export VAULT_PATH="${_root}${_vault:+/$_vault}"
+        ;;
     repos)    export REPOS_BASE=$(yq '.repos.base_path' ~/ai/local.yaml) ;;
     *)        echo "Unknown indexer: $INDEXER (use 'obsidian' or 'repos')"; exit 1 ;;
 esac

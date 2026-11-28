@@ -63,11 +63,20 @@ package "Shared MCPs (ai-shared)" as shared_mcps #FFF3E0 {
   [adb-proxy\n:3927 → :3001 (WS)\nPhotoshop UXP bridge, not an MCP endpoint] as adb_proxy #FFE0B2
 }
 
+' === Host bridges — launchd LaunchAgents, NOT containers, NOT on ai-shared ===
+' Each is supergateway wrapping a stdio MCP as SSE on the host. They live here
+' because each needs something only the logged-in GUI session has, so they are
+' inherently tied to this Mac. Managed with mcps/<name>/manage.sh, not docker.
+package "Host bridges (launchd — this Mac only)" as host_bridges #FFF9C4 {
+  [fantastical\n:7013 (supergateway)\nAppleScript/EventKit need GUI-session TCC] as fantastical #FFF59D
+  [amazon-orders\n:7014 (supergateway)\nbrowser sign-in needs a display;\nsession jar in ~/.config] as amazon_orders #FFF59D
+}
+
 ' === Code Intelligence — codebase + knowledge indexing (two complementary kinds) ===
 package "Code Intelligence" as code_intel #ECEFF1 {
   package "qdrant stack (ai-shared)\n<b>semantic — vector RAG</b>" as qdrant_stack #FFF3E0 {
     component "qdrant-mcp\n:7020 (mcp-proxy)\n4 named servers · 8 tools" as qdrant_mcp #FFCC80
-    component "qdrant (vector DB)\n:6333 (HTTP) · :6334 (gRPC)\n""code-work__jina"" · ""code-public__jina""\n""notes-work"" · ""personal"" (empty)" as qdrant #CE93D8
+    component "qdrant (vector DB)\n:6333 (HTTP) · :6334 (gRPC)\n""code-work__jina"" · ""code-public__jina""\n""notes-work"" · ""notes-personal""" as qdrant #CE93D8
     component "obsidian-watcher\n(sidecar, :cpu image)" as obs_watcher #FFE0B2
     component "repo-watcher-work\n(sidecar, :gpu image)" as repo_watcher_work #FFE0B2
     component "repo-watcher-public\n(sidecar, :gpu image)" as repo_watcher_public #FFE0B2
@@ -126,6 +135,10 @@ mcp_status --> stdio_proxy : poll /status
 gateways --> context7   : SSE (ai-shared)
 gateways --> memory     : SSE
 gateways --> qdrant_mcp : SSE (semantic search)
+
+' Host bridges: reached back out of Docker, not over ai-shared. mcpx filters
+' these per-tool at its toolGroup; agentgateway cannot, so it sees every tool.
+gateways --> host_bridges : SSE via host.docker.internal
 
 ' Photoshop chain: psmcp (stdio) → adb-proxy (WS bridge) → host Photoshop UXP plugin
 stdio_psmcp ..> adb_proxy : WS :3001\n(→ host Photoshop UXP)
@@ -206,11 +219,11 @@ Each stack is a self-contained `docker compose` unit. Stacks with a stdio-proxy 
 
 | Service | What it does | Host Ports |
 | ------- | ------------ | ---------- |
-| qdrant | Vector database for RAG embeddings. 4 collections: `code-work__jina`, `code-public__jina`, `notes-work`, `personal` (empty) | :6333 (HTTP), :6334 (gRPC) |
+| qdrant | Vector database for RAG embeddings. 4 collections: `code-work__jina`, `code-public__jina`, `notes-work`, `notes-personal` | :6333 (HTTP), :6334 (gRPC) |
 | qdrant-mcp | mcp-proxy hosting 4 named MCP servers (one per collection) from a single `servers.json`; FastEmbed-powered semantic search | :7020 |
 | repo-watcher-work | Watches `/repos`, reindexes into `code-work__jina` (`:gpu` image) | — |
 | repo-watcher-public | Watches `/repos`, reindexes into `code-public__jina` (`:gpu` image) | — |
-| obsidian-watcher | Watches `/vault`, reindexes into `notes-work` (`:cpu` image) | — |
+| obsidian-watcher | Watches `/vault`, routes `0 Profisee` into `notes-work` and the remaining eligible notes into `notes-personal` (`:cpu` image) | — |
 
 Three independent watchers, one per corpus — nothing coordinates them, and each holds its
 lockfile in its own container layer, so one lane can freeze silently while the others keep
@@ -229,6 +242,27 @@ These run as standalone containers (each has its own `mcps/<name>/docker-compose
 | playwright | :7007 | ⬚ Available | 15+ |
 | browser-use | :7011 | ⬚ Available | 10+ |
 | hass-mcp | :7010 | ⬚ Available | 5+ |
+
+### Host bridges (launchd LaunchAgents, not containers)
+
+These are **not** containers and are not on `ai-shared`. Each is a `supergateway`
+LaunchAgent wrapping a stdio MCP as SSE on the host; the gateway containers reach
+back via `host.docker.internal`. They live on the host because each needs
+something only the logged-in macOS GUI session has — TCC/AppleScript, or an
+interactive browser sign-in — or because its credential at rest should not be
+mounted into a gateway container shared by every consumer. Managed with
+`mcps/<name>/manage.sh` (the `docker compose` equivalent; see the Rosetta table
+in `mcps/fantastical/readme.md`), **not** `docker`.
+
+Both are **this machine only**: their state lives in this user's home directory.
+
+| Bridge | Port | Status | Tools | Why host-side |
+| ------ | ---- | ------ | ----- | ------------- |
+| [fantastical](mcps/fantastical/readme.md) | :7013 | ✅ Running | 6 | AppleScript + EventKit need GUI-session TCC |
+| [amazon-orders](mcps/amazon-orders/readme.md) | :7014 | ✅ Running | 13 (11 via mcpx) | browser sign-in needs a display; session jar stays in `~/.config` |
+
+`/healthz` on these is **not** a liveness signal — supergateway returns `ok`
+unconditionally. Use `manage.sh test`, which probes the MCP handshake.
 
 ### Platform Services
 
@@ -281,6 +315,7 @@ ai-infrastructure/
 ├── gateways/          # MCP gateways
 │   └── agentgateway/  # Linux Foundation MCP gateway
 ├── mcps/              # MCP servers
+│   ├── amazon-orders/ # Amazon order history (host bridge, LaunchAgent)
 │   ├── browser-use/   # AI browser automation
 │   ├── context7/      # Library documentation
 │   ├── hass-mcp/      # Home Assistant
@@ -322,6 +357,7 @@ Standalone MCPs run as their own containers on `ai-shared`. stdio MCPs run insid
 | [playwright](mcps/playwright/readme.md) | Standalone | Browser automation | ⬚ Available | [→](mcps/playwright/readme.md) |
 | [browser-use](mcps/browser-use/readme.md) | Standalone | AI browser automation | ⬚ Available | [→](mcps/browser-use/readme.md) |
 | [hass-mcp](mcps/hass-mcp/readme.md) | Standalone | Home Assistant | ⬚ Available | [→](mcps/hass-mcp/readme.md) |
+| [amazon-orders](mcps/amazon-orders/readme.md) | Host bridge | Amazon order history, tracking, invoices, transactions. `find_charge` resolves a card charge to its order and items. | ✅ Running | [→](mcps/amazon-orders/readme.md) |
 
 ### Platform Services
 
@@ -380,7 +416,7 @@ docker compose up -d
 ```bash
 cd mcps/qdrant-mcp
 # Set vault + repos paths from local config (used by watcher sidecars)
-export VAULT_PATH="$(yq '.obsidian.vault_path' ~/ai/local.yaml)"
+export VAULT_PATH="$(~/ai/skills/obsidian-notes/scripts/vault.sh --default)"
 export REPOS_BASE="$(yq '.repos.base_path' ~/ai/local.yaml)"
 docker compose up -d --build
 ```
@@ -462,6 +498,10 @@ Single sorted reference. `Stack` is the compose project the port belongs to; int
 | 7008 | HTTP/MCP | context7 | shared MCP | Library documentation MCP |
 | 7010 | HTTP | hass-mcp | shared MCP | Home Assistant MCP — available |
 | 7011 | SSE/MCP | browser-use | shared MCP | AI browser automation — available |
+| 7012 | SSE/MCP | monarch-money | shared MCP | Personal finance MCP (cookie-auth fork) |
+| 7013 | SSE/MCP | fantastical | host bridge | Calendar — LaunchAgent on the host, not a container |
+| 7014 | SSE/MCP | amazon-orders | host bridge | Amazon order history — LaunchAgent on the host, not a container |
+| 7015 | SSE/MCP | paperless | shared MCP | Document archive MCP (read-only exposure) |
 | 7020 | HTTP | qdrant-mcp | qdrant-mcp | Semantic search MCP |
 | 7030 | HTTP | stdio-proxy | per-gateway | **Internal only** — stdio→SSE bridge inside each gateway stack |
 | 7040 | HTTP | memory | shared MCP | Knowledge graph MCP (singleton) |
@@ -605,4 +645,3 @@ See [Context Lens workflow details](docs/context-lens-cherry-pick-workflow.md) f
 - [Langfuse](https://langfuse.com/docs)
 - [mcpx / Lunar.dev](https://docs.lunar.dev/mcpx/architecture)
 - [Context Lens](https://github.com/larsderidder/context-lens)
-

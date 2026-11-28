@@ -196,6 +196,14 @@ The `otel-ingest` container follows the log and imports each request into Contex
 
 Compared with the proxy you lose per-request timings and HTTP headers. Thinking text is missing either way, since the API only returns it encrypted. `CLAUDE_CODE_TETHER_LIVE` is undocumented; if a Claude Code release stops honouring it, the importer logs `skip ...: thread continuation` instead of importing partial requests.
 
+If your user settings file is shared between machines, keep these variables in a machine-local file sourced from your shell profile instead, since the log path differs per machine. That works because the Claude Code daemon starts on demand from a client launched in that environment.
+
+#### Moving an existing machine off the proxy
+
+- **Restart the daemon after removing the variable.** The daemon and the spare sessions it starts ahead of time keep the environment they started with, so new sessions keep using the proxy until it restarts. Run `claude daemon stop --any --keep-workers`, then start `claude` from a new shell. `claude doctor` should report `ANTHROPIC_BASE_URL: not set` and list Remote Control.
+- **Sessions started through the proxy refuse to start without it**, with `No LLM gateway: session stopped ... No model request was sent.` Claude Code marks them with an empty file per session in `~/.claude/daemon/gateway-routed/`, named by the first 8 characters of the session ID. The proxy only forwards to `api.anthropic.com`, so removing those files is safe, and the sessions then open directly. Or continue one as a new session with `claude --resume <id> --fork-session`; the marker belongs to the old session ID.
+- **Ignore the error's suggestion to set `ANTHROPIC_BASE_URL` in the settings `env` block.** That moves every session back to the proxy and turns Remote Control off again.
+
 ### OpenCode
 
 OpenCode using `github-copilot/claude-*` model IDs routes through GitHub Copilot's API and is **not affected** by `ANTHROPIC_BASE_URL`.

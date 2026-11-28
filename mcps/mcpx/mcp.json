@@ -4,7 +4,8 @@
       "url": "http://host.docker.internal:7011/sse",
       "type": "sse",
       "icon": "#2ECC71"
-    }
+    },
+    "_resolved_2026_09_07": "Both fantastical and monarch-money were disabled here earlier on 2026-09-07 and have since been FIXED and re-enabled below. Keeping the causes recorded because both were misdiagnosed at first and both are the same failure CLASS -- an upstream returning a malformed JSON-RPC error that mcpx's main() does not catch, killing the whole gateway (supervisord then hits startretries=3 and stops mcpx-server permanently, while the Docker healthcheck keeps reporting healthy because it probes the UI on :5173, not :9000). FANTASTICAL: not a flaky process as first written here -- supergateway 3.4.3's stdioToSse reuses ONE MCP SDK Server across SSE sessions and overwrites sseTransport.onclose AFTER server.connect(), so Protocol._transport is never released. With @modelcontextprotocol/sdk >= 1.26.0 the second connect() throws 'Already connected to a transport', uncaught. That is ONE SSE session per process lifetime -- sequential connects fail exactly like concurrent ones (verified on a fresh process: session A OK, closed, session B 2.5s later FAILED). launchd KeepAlive respawned it 100,022 times / 335,704 logged crashes / 421MB of logs between 2026-07-01 and 2026-09-07. Fixed by pinning supergateway@3.3.0 (the one release with a per-session Server + pooled child) with --minConcurrency 1 --maxConcurrency 2 in mcps/fantastical/com.bobthearsonist.fantastical-mcp.plist. MONARCH: expired cookies were NOT the cause -- tools/list never touches credentials. mcp-proxy 0.12.0 holds one shared upstream stdio ClientSession, and that session died 2026-08-31 ~17:11 while the child process stayed alive and sleeping, so every forwarded method returned ErrorData(code=0, message='') from mcp/server/lowlevel/server.py:788. Fixed by restarting the monarch-money-mcp container. The cookies ARE separately dead (keyring dated 2026-05-31, verified 401) which breaks tool CALLS but not listing -- re-seed per docs/monarch-money-cookie-automation.md. Also corrected in this pass: mcps/mcpx/app.yaml's personal-finance group was using \"*\" on the false premise that the server ran without --enable-write, exposing all 39 tools including delete_account; it now carries an explicit 22-tool read list."
   },
   "mcpServers": {
     "hass-mcp": {
@@ -42,33 +43,40 @@
       "type": "sse",
       "icon": "#27AE60"
     },
-    "qdrant-personal": {
-      "url": "http://host.docker.internal:7020/servers/qdrant-personal/sse",
+    "qdrant-notes-personal": {
+      "url": "http://host.docker.internal:7020/servers/qdrant-notes-personal/sse",
       "type": "sse",
       "icon": "#E91E63"
     },
     "sequential-thinking": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ],
       "env": {},
       "icon": "#EA8685"
     },
     "memory": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"],
-      "env": {
-        "MEMORY_FILE_PATH": "/lunar/packages/mcpx-server/config/memory.json"
-      },
+      "url": "http://memory-mcp:7040/servers/memory/sse",
+      "type": "sse",
       "icon": "#6CC2CE"
     },
-    "kapture": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "kapture-mcp", "bridge"],
-      "env": {},
-      "icon": "#D35400"
+    "monarch-money": {
+      "url": "http://monarch-money-mcp:7012/servers/monarch-money/sse",
+      "type": "sse",
+      "icon": "#00B388"
+    },
+    "fantastical": {
+      "url": "http://host.docker.internal:7013/sse",
+      "type": "sse",
+      "icon": "#FF3B30"
+    },
+    "amazon-orders": {
+      "url": "http://host.docker.internal:7014/sse",
+      "type": "sse",
+      "icon": "#FF9900"
     },
     "paperless": {
       "url": "http://paperless-mcp:7015/servers/paperless/sse",
